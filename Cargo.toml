@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = ["crates/appkit-core", "crates/appkit-hub", "crates/appkit-testkit"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+authors = ["Stefan Bartl"]
+repository = "https://github.com/StefanBartl/appkit"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
