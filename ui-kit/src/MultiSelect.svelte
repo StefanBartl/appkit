@@ -64,6 +64,14 @@
     }
   }
 
+  // A press on a spot of the popup that takes no focus (its padding, the gap between the search and the list, the
+  // edge of a row) would move the focus to the body and close the popup through focusout, with the person still in
+  // the choice. The focus stays where it is; a field or a box still takes it, and a label still ticks its box.
+  function onPopupMouseDown(event: MouseEvent): void {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLButtonElement)) event.preventDefault();
+  }
+
   function onKey(event: KeyboardEvent): void {
     if (event.key === 'Escape' && open) {
       // The page's own Escape (leave the selection) must not also fire, nor the dialog's own (it would close).
@@ -83,6 +91,8 @@
   onkeydown={onKey}
   onfocusout={(e) => {
     const to = e.relatedTarget;
+    // The window lost the focus (another window, Alt+Tab): the choice is still where the person left it.
+    if (to === null && !document.hasFocus()) return;
     if (open && root && !(to instanceof Node && root.contains(to))) close(false);
   }}
   role="presentation"
@@ -100,7 +110,7 @@
     <span class="caret" aria-hidden="true">▾</span>
   </button>
   {#if open}
-    <div class="popup" role="group" aria-label={label}>
+    <div class="popup" role="group" aria-label={label} onmousedown={onPopupMouseDown}>
       {#if options.length >= SEARCH_FROM}
         <input
           type="search"
