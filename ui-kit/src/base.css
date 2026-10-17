@@ -12,7 +12,7 @@ body {
 body {
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.45 var(--font);
+  font: var(--font-size) / var(--line-height) var(--font);
 }
 button,
 input,
@@ -53,9 +53,9 @@ pre {
   padding: 0.45rem 0.65rem;
   background: var(--surface-2);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+  box-shadow: var(--shadow-sm);
   font-size: 0.85rem;
   line-height: 1.35;
   white-space: pre-line;
@@ -73,7 +73,7 @@ pre {
   padding: 0;
   background: transparent;
   color: var(--muted);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   font-size: 0.8rem;
   line-height: 1;

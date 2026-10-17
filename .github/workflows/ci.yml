@@ -46,6 +46,17 @@ jobs:
       # No crate version younger than a week (see tools/check-lock-age.py).
       - run: python3 tools/check-lock-age.py --min-days 7
 
+  # The tools test themselves; no control character in a tracked file, no colour of the kit outside its tokens.
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 (node24)
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover tools
+      - run: python3 tools/check-control-chars.py
+      - run: python3 tools/check-color-literals.py --root ui-kit/src --tokens ui-kit/src/tokens.css
+
   # The browser parts of the kit (ui-kit): source only, checked and tested here; the apps bundle it.
   ui-kit:
     runs-on: ubuntu-latest

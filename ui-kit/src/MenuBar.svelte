@@ -222,7 +222,7 @@
   .trigger:hover,
   .trigger[aria-expanded='true'] {
     background: var(--surface-2);
-    border-color: var(--border);
+    border-color: var(--line);
   }
   .popup {
     position: absolute;
@@ -231,9 +231,9 @@
     left: 0;
     min-width: 13rem;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     border-radius: var(--radius);
-    box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
+    box-shadow: var(--shadow);
     padding: 0.3rem;
     max-width: calc(100vw - 1rem);
   }
@@ -277,7 +277,7 @@
   }
   hr {
     border: 0;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--line);
     margin: 0.3rem 0;
   }
 </style>

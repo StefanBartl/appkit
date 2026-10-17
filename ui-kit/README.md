@@ -5,7 +5,7 @@ bundler (Vite with the Svelte plugin) compiles them, there is no build here.
 
 | What | File |
 |---|---|
-| The design tokens: surfaces, text, lines, accent, meaning colours, focus ring, mark, radius, fonts; `light-dark()` follows the system, `data-theme` on the root overrides it | `tokens.css` |
+| The design tokens in ten groups: surfaces, text, lines and accent (`--line`, `--accent-soft`, `--focus`), meaning colours, depth and marks (`--shadow`, `--shadow-sm`, `--backdrop`, `--mark`), shape, type (`--font-size`, `--line-height`), the theme (`light-dark()` follows the system, `data-theme` on the root overrides it), the base rules, and the check that no colour lives outside the tokens (`tools/check-color-literals.py`, which every app runs over its own page too). `--border` is an alias of `--line` while the pages move | `tokens.css` |
 | The base rules that come with them: box model, page, focus ring, headings, the hint popup, the info button, `.sr-only`, reduced motion | `base.css` |
 | The menu bar of an application (a row of menus with the keys of the ARIA pattern) | `MenuBar.svelte` |
 | A choice of any number of values, with a search when the list is long | `MultiSelect.svelte` |

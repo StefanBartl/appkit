@@ -1,35 +1,60 @@
-/* The design tokens of every app of appkit. Tokens first; every colour in a page comes from them, no hex or rgb
-   literal lives outside this file. `light-dark()` and `color-scheme` follow the system; `data-theme` on the root
-   element overrides it (`light`, `dark`; no attribute means the system's choice). */
+/* The design tokens of every app of appkit, in ten groups. Variables only, so a page that shares nothing else
+   (docmap-desktop) can load this file alone; the rules that use them are in base.css. Every colour of a page comes
+   from here: tools/check-color-literals.py refuses a hex or rgb literal anywhere else.
+
+   Theme: `light-dark()` and `color-scheme` follow the system; `data-theme` on the root element overrides it
+   (`light`, `dark`; no attribute means the system's choice). */
 :root {
   color-scheme: light dark;
-  /* Surfaces: the page, a card, a popup or chip. */
+
+  /* 1. Surfaces: the page, a card, a popup or chip. */
   --bg: light-dark(#f7f7f5, #15171a);
   --surface: light-dark(#ffffff, #1d2024);
   --surface-2: light-dark(#eeeeea, #262a30);
-  /* Lines. */
-  --border: light-dark(#d4d4cf, #343942);
-  /* Text: --muted keeps a contrast of at least 4.5:1 on --bg and --surface (6.3:1 light, 7.6:1 dark). */
+
+  /* 2. Text: --muted keeps a contrast of at least 4.5:1 on --bg and --surface (6.3:1 light, 7.6:1 dark); the text
+     on the accent. */
   --text: light-dark(#1b1d20, #e8e9ea);
   --muted: light-dark(#5a5f66, #a3a8b0);
-  /* The accent, and the text on it. */
-  --accent: light-dark(#1f5fbf, #7fb0ff);
   --accent-text: light-dark(#ffffff, #0b1a33);
-  /* Meaning: never the only sign of it (a word or a symbol goes with the colour). */
+
+  /* 3. Lines and accent: the line of a card or a field, the accent, the surface of a hover or a choice, and the
+     focus ring, a colour of its own, not the accent. */
+  --line: light-dark(#d4d4cf, #343942);
+  --accent: light-dark(#1f5fbf, #7fb0ff);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --focus: light-dark(#0a4fd0, #9ec3ff);
+
+  /* 4. Meaning: never the only sign of it (a word or a symbol goes with the colour). An app may leave them
+     unused. */
   --ok: light-dark(#17692d, #6fd68a);
   --warn: light-dark(#8a5a00, #f0c060);
   --bad: light-dark(#a3231f, #ff8a84);
-  /* The focus ring, a colour of its own, not the accent. */
-  --focus: light-dark(#0a4fd0, #9ec3ff);
-  /* A marked piece of text (a search hit). */
+
+  /* 5. Depth and marks: the shadow of a popup or menu, the smaller one of a hint, the shade behind a dialog, a
+     marked piece of text (a search hit). */
+  --shadow: 0 6px 20px rgb(0 0 0 / 0.25);
+  --shadow-sm: 0 4px 14px rgb(0 0 0 / 0.25);
+  --backdrop: rgb(0 0 0 / 0.45);
   --mark: light-dark(#ffe58a, #6b5a00);
-  /* Shape. */
+
+  /* 6. Shape. */
   --radius: 6px;
+  --radius-lg: 10px;
   --radius-pill: 999px;
-  /* Type. */
+
+  /* 7. Type: no font is bundled, the system's is used. */
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --font-size: 14px;
+  --line-height: 1.45;
+
+  /* Aliases while the pages move to the names above: --border is --line. */
+  --border: var(--line);
 }
+
+/* 8. The theme a person chose. (9, the base rules, are in base.css; 10, the check against literals, is
+   tools/check-color-literals.py.) */
 :root[data-theme='light'] {
   color-scheme: light;
 }

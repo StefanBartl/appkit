@@ -76,7 +76,7 @@
   blockquote {
     margin: 0 0 0.6em;
     padding-left: 0.8em;
-    border-left: 3px solid var(--border);
+    border-left: 3px solid var(--line);
     color: var(--muted);
   }
   pre {
@@ -95,7 +95,7 @@
   }
   th,
   td {
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     padding: 0.2rem 0.5rem;
     text-align: left;
   }
