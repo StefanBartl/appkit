@@ -1,0 +1,10 @@
+# Supply chain, as in the apps: nothing younger than seven days, no downgrade of the trust level, no
+# install scripts unless named here.
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+blockExoticSubdeps: true
+onlyBuiltDependencies: []
+# One named exception, the same as in tasks-desktop: chokidar 4.0.3 (a dependency of svelte-check,
+# used only to watch files in dev) was published without the provenance its earlier versions had.
+trustPolicyExclude:
+  - chokidar@4.0.3

@@ -1,0 +1,99 @@
+/* The base rules that come with the tokens: the box model, the page, the focus ring, the headings, the hint popup of
+   `tooltip.ts`, the info button of `Info.svelte`, the screen-reader-only text and the respect for reduced motion. An
+   app loads `tokens.css` first and this file second. */
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 var(--font);
+}
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+h1,
+h2,
+h3 {
+  margin: 0 0 0.5em;
+  line-height: 1.25;
+}
+h1 {
+  font-size: 1.25rem;
+}
+h2 {
+  font-size: 1rem;
+}
+h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+code,
+pre {
+  font-family: var(--mono);
+}
+.hint-tip {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(26rem, 92vw);
+  padding: 0.45rem 0.65rem;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.hint-tip[hidden],
+.hint-host[hidden] {
+  display: none;
+}
+.info {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: help;
+}
+.info:hover {
+  color: var(--text);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

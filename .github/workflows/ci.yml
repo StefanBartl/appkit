@@ -45,3 +45,20 @@ jobs:
       - run: cargo deny check
       # No crate version younger than a week (see tools/check-lock-age.py).
       - run: python3 tools/check-lock-age.py --min-days 7
+
+  # The browser parts of the kit (ui-kit): source only, checked and tested here; the apps bundle it.
+  ui-kit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui-kit
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 (node24)
+        with:
+          persist-credentials: false
+      # The lockfile is the truth; the age and trust policy are in ui-kit/pnpm-workspace.yaml.
+      - run: npm install --global pnpm@11.28.2
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm audit --audit-level high

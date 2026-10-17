@@ -1,0 +1,38 @@
+/* The design tokens of every app of appkit. Tokens first; every colour in a page comes from them, no hex or rgb
+   literal lives outside this file. `light-dark()` and `color-scheme` follow the system; `data-theme` on the root
+   element overrides it (`light`, `dark`; no attribute means the system's choice). */
+:root {
+  color-scheme: light dark;
+  /* Surfaces: the page, a card, a popup or chip. */
+  --bg: light-dark(#f7f7f5, #15171a);
+  --surface: light-dark(#ffffff, #1d2024);
+  --surface-2: light-dark(#eeeeea, #262a30);
+  /* Lines. */
+  --border: light-dark(#d4d4cf, #343942);
+  /* Text: --muted keeps a contrast of at least 4.5:1 on --bg and --surface (6.3:1 light, 7.6:1 dark). */
+  --text: light-dark(#1b1d20, #e8e9ea);
+  --muted: light-dark(#5a5f66, #a3a8b0);
+  /* The accent, and the text on it. */
+  --accent: light-dark(#1f5fbf, #7fb0ff);
+  --accent-text: light-dark(#ffffff, #0b1a33);
+  /* Meaning: never the only sign of it (a word or a symbol goes with the colour). */
+  --ok: light-dark(#17692d, #6fd68a);
+  --warn: light-dark(#8a5a00, #f0c060);
+  --bad: light-dark(#a3231f, #ff8a84);
+  /* The focus ring, a colour of its own, not the accent. */
+  --focus: light-dark(#0a4fd0, #9ec3ff);
+  /* A marked piece of text (a search hit). */
+  --mark: light-dark(#ffe58a, #6b5a00);
+  /* Shape. */
+  --radius: 6px;
+  --radius-pill: 999px;
+  /* Type. */
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}

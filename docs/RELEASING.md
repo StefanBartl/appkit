@@ -1,7 +1,9 @@
 # Releasing
 
 A version of `appkit` is a tag `vX.Y.Z` on `main`. There is no build to publish: the apps depend on
-the tag, and `Cargo.lock` of each app pins its commit.
+the tag, and `Cargo.lock` of each app pins its commit. The tag covers the Rust crates and the browser
+kit (`ui-kit`) alike: an app pins both to the same tag (`pnpm-lock.yaml` holds the commit of the
+kit), and its CI checks that the two pins name one commit.
 
 1. **`main` is green.** The CI of the very commit that gets the tag passed on Linux and Windows,
    with `cargo deny` and `cargo audit`.

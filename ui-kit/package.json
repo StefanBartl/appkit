@@ -1,0 +1,44 @@
+{
+  "name": "appkit-ui",
+  "version": "0.0.0",
+  "private": false,
+  "description": "The parts of the browser page that every app of appkit shares: the design tokens and base rules, the menu bar, the multi-select, the info button, the markdown reader, the hint popup, the event-stream reader, the pairing code and the hidden-character guard. Source only: the app's bundler compiles it.",
+  "license": "MIT",
+  "repository": "https://github.com/StefanBartl/appkit",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./src/tokens.css",
+    "./base.css": "./src/base.css",
+    "./i18n": "./src/i18n.ts",
+    "./markdown": "./src/markdown.ts",
+    "./pair": "./src/pair.ts",
+    "./sse": "./src/sse.ts",
+    "./text": "./src/text.ts",
+    "./tooltip": "./src/tooltip.ts",
+    "./*.svelte": "./src/*.svelte"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "dependencies": {
+    "markdown-it": "^15.0.2"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.6",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  }
+}

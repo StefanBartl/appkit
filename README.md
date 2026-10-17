@@ -15,6 +15,7 @@ and the same tests. It knows no app: an app brings its names, its routes and its
 | `appkit-core` | Building blocks without a server: the names of an app (`AppIdentity`), pairing and sessions, safe process runs and reads, `hub.json`, `control.secret`. |
 | `appkit-hub` | The hub without the app: the guard (eight steps, in a fixed order), pairing, the page, `hello`, the list of vaults, the accept loop, the seam of the engine (one process per call, or a persistent host), the snapshot store, the file watcher, the full-text search, the settings file, the search for Neovim and the engine, installing, autostart and the first-start questions. |
 | `appkit-testkit` | The security matrix every app's hub must pass, a second minimal app (`Demo`) that proves the guard knows no app, and a fake engine to test without Neovim. |
+| `ui-kit` (`appkit-ui`) | The browser side, Svelte 5 and TypeScript source: the design tokens and base rules, the menu bar, the multi-select, the info button, the markdown reader, the hint popup, the event-stream reader, the pairing code and the hidden-character guard. See [ui-kit/README.md](ui-kit/README.md). |
 
 ## Using it
 
@@ -26,6 +27,12 @@ appkit-hub = { git = "https://github.com/StefanBartl/appkit", tag = "v0.1.0" }
 
 [dev-dependencies]
 appkit-testkit = { git = "https://github.com/StefanBartl/appkit", tag = "v0.1.0" }
+```
+
+The page of an app takes the same tag, by its folder (`pnpm-lock.yaml` pins the commit):
+
+```
+pnpm add "git+https://github.com/StefanBartl/appkit.git#vX.Y.Z&path:ui-kit"
 ```
 
 `Cargo.lock` then pins the commit of the tag. To work on the kit and an app at once, point the app at
