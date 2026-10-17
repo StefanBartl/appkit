@@ -110,6 +110,8 @@
     <span class="caret" aria-hidden="true">▾</span>
   </button>
   {#if open}
+    <!-- The listener steers the focus only (see onPopupMouseDown); the group itself is not interactive. -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div class="popup" role="group" aria-label={label} onmousedown={onPopupMouseDown}>
       {#if options.length >= SEARCH_FROM}
         <input
