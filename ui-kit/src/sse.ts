@@ -15,10 +15,6 @@ export class SseParser {
 
   push(text: string): SseMessage[] {
     this.buffer += text;
-    if (this.buffer.length > MAX_BUFFER) {
-      this.buffer = '';
-      throw new Error('event stream: a message without an end');
-    }
     const out: SseMessage[] = [];
     // A message ends with an empty line; line ends may be \n, \r\n or \r.
     for (;;) {
@@ -28,6 +24,13 @@ export class SseParser {
       this.buffer = this.buffer.slice(match.index + match[0].length);
       const message = parseBlock(block);
       if (message) out.push(message);
+    }
+    // The limit is for what has no end yet: a chunk that completes a long message and brings the next one may push
+    // the buffer over it for a moment, with every message in it below the limit. The messages that are complete are
+    // taken out first; what is left is what counts.
+    if (this.buffer.length > MAX_BUFFER) {
+      this.buffer = '';
+      throw new Error('event stream: a message without an end');
     }
     return out;
   }

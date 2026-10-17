@@ -29,6 +29,13 @@ describe('SseParser limits', () => {
     const p = new SseParser();
     expect(() => p.push('data: ' + 'x'.repeat(MAX_BUFFER + 1))).toThrow();
   });
+  it('keeps every message that is below the limit, also when a chunk brings the end of one and the next', () => {
+    const p = new SseParser();
+    expect(p.push('data: ' + 'x'.repeat(900 * 1024))).toEqual([]);
+    // The buffer holds more than the limit for a moment; each message in it is below it.
+    const out = p.push('\n\ndata: ' + 'y'.repeat(200 * 1024) + '\n\n');
+    expect(out.map((m) => m.data.length)).toEqual([900 * 1024, 200 * 1024]);
+  });
 });
 
 describe('readStream', () => {

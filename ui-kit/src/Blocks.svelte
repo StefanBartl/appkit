@@ -4,10 +4,11 @@
   import Blocks from './Blocks.svelte';
   import Inlines from './Inlines.svelte';
 
-  let { blocks }: { blocks: Block[] } = $props();
+  // `headingBase` is the level of the heading the text sits under: its own headings start one level below it, so the
+  // page keeps one order of headings (a text under an h2 starts at h3).
+  let { blocks, headingBase = 1 }: { blocks: Block[]; headingBase?: number } = $props();
 
-  // Headings of a task body sit below the h1 of the task.
-  const heading = (level: number) => Math.min(6, level + 2);
+  const heading = (level: number) => Math.min(6, level + headingBase);
 </script>
 
 {#each blocks as block, i (i)}
@@ -21,11 +22,11 @@
   {:else if block.t === 'list'}
     <svelte:element this={block.ordered ? 'ol' : 'ul'} start={block.ordered ? block.start : undefined}>
       {#each block.items as item, j (j)}
-        <li><Blocks blocks={item} /></li>
+        <li><Blocks blocks={item} {headingBase} /></li>
       {/each}
     </svelte:element>
   {:else if block.t === 'quote'}
-    <blockquote><Blocks blocks={block.children} /></blockquote>
+    <blockquote><Blocks blocks={block.children} {headingBase} /></blockquote>
   {:else if block.t === 'pre'}
     <!-- A scrolling block is reached with the keyboard. -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->

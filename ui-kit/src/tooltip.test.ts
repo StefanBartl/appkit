@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { placeTip, withToken, withoutToken } from './tooltip';
+import { installTooltips, placeTip, withToken, withoutToken } from './tooltip';
 
 const view = { width: 1000, height: 600 };
+
+/** A type test (the tests run without a DOM): the kit has no word of its own, so the app must name the region. */
+export function needsALabel(doc: Document, win: Window & typeof globalThis): void {
+  // @ts-expect-error the name of the region is the app's word; an install without one is a type error
+  installTooltips(doc, win);
+}
 
 describe('placeTip', () => {
   it('goes below the element', () => {

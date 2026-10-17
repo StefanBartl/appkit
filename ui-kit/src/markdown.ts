@@ -1,4 +1,4 @@
-// Markdown of a task body, read into a small tree and drawn by components.
+// Markdown of an untrusted text, read into a small tree and drawn by components.
 //
 // The body is untrusted. It never becomes an HTML string: markdown-it (with
 // `html: false`) gives tokens, the tokens become this tree, and Svelte makes

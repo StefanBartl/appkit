@@ -202,7 +202,7 @@
     border-radius: var(--radius);
     cursor: pointer;
   }
-  /* A long name (an area, a plan) wraps inside the popup instead of being cut. */
+  /* A long option label wraps inside the popup instead of being cut. */
   li label span {
     overflow-wrap: anywhere;
   }

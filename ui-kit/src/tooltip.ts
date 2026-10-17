@@ -5,7 +5,7 @@
 
 /** What an app tells the popup: the name of its region, in the app's language (the kit has no words of its own). */
 export interface TooltipOptions {
-  regionLabel?: () => string;
+  regionLabel: () => string;
 }
 
 export interface Box {
@@ -53,7 +53,7 @@ export function withoutToken(list: string | null, token: string): string {
 export function installTooltips(
   doc: Document,
   win: Window & typeof globalThis,
-  options: TooltipOptions = {},
+  options: TooltipOptions,
 ): () => void {
   // The popup lives in a region of its own that is there only while a hint is open: content outside every
   // landmark is a finding of its own, and an always present empty region would be noise for a screen reader.
@@ -67,8 +67,8 @@ export function installTooltips(
   tip.setAttribute('role', 'tooltip');
   host.appendChild(tip);
   doc.body.appendChild(host);
-  // The name of the region is the app's word (its dictionary); without one, a plain English word.
-  const regionLabel = (): string => options.regionLabel?.() ?? 'Explanation';
+  // The name of the region is the app's word (its dictionary): the kit has none, so the app must give one.
+  const regionLabel = options.regionLabel;
 
   let current: HTMLElement | null = null;
   let describedBefore: string | null = null;
