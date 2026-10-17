@@ -1,6 +1,7 @@
 /* The design tokens of every app of appkit, in ten groups. Variables only, so a page that shares nothing else
    (docmap-desktop) can load this file alone; the rules that use them are in base.css. Every colour of a page comes
-   from here: tools/check-color-literals.py refuses a hex or rgb literal anywhere else.
+   from here: tools/check-color-literals.py refuses a hex colour or a colour function wherever the CSS of a page
+   states a colour outside this file (declarations, style attributes and directives, SVG paint attributes).
 
    Theme: `light-dark()` and `color-scheme` follow the system; `data-theme` on the root element overrides it
    (`light`, `dark`; no attribute means the system's choice). */

@@ -1,2 +1,4 @@
 /target
 ui-kit/node_modules
+__pycache__/
+*.pyc

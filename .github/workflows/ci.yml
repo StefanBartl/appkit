@@ -46,7 +46,7 @@ jobs:
       # No crate version younger than a week (see tools/check-lock-age.py).
       - run: python3 tools/check-lock-age.py --min-days 7
 
-  # The tools test themselves; no control character in a tracked file, no colour of the kit outside its tokens.
+  # The tools test themselves; no control character in a tracked file, no colour in the CSS of the kit outside its tokens.
   hygiene:
     runs-on: ubuntu-latest
     steps:
