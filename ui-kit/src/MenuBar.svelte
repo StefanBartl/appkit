@@ -23,6 +23,10 @@
   let { menus, label }: { menus: readonly Menu[]; label: string } = $props();
 
   let openId = $state<string | null>(null);
+  // One tab stop for the whole bar (the ARIA menubar pattern): the trigger that was used last takes it, the others
+  // are reached with Left and Right, Home and End.
+  let stop = $state<string | null>(null);
+  const stopId = $derived(stop !== null && menus.some((m) => m.id === stop) ? stop : (menus[0]?.id ?? null));
   let root: HTMLElement | undefined = $state();
 
   const roleOf = (item: MenuItem): string =>
@@ -80,6 +84,14 @@
         const next = list[(at + step + list.length) % list.length];
         next?.focus();
         if (openId !== null && next?.dataset.for) void open(next.dataset.for, null);
+        break;
+      }
+      case 'Home':
+      case 'End': {
+        event.preventDefault();
+        const edge = list[event.key === 'Home' ? 0 : list.length - 1];
+        edge?.focus();
+        if (openId !== null && edge?.dataset.for) void open(edge.dataset.for, null);
         break;
       }
       case 'Escape':
@@ -162,6 +174,8 @@
         class="trigger"
         role="menuitem"
         data-for={menu.id}
+        tabindex={stopId === menu.id ? 0 : -1}
+        onfocus={() => (stop = menu.id)}
         aria-haspopup="menu"
         aria-expanded={openId === menu.id}
         onclick={() => (openId === menu.id ? close(false) : void open(menu.id, null))}
