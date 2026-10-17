@@ -24,6 +24,8 @@ pub struct FakeDialect {
     pub host_script: &'static str,
     /// The key of the list of documents in a snapshot.
     pub list_key: &'static str,
+    /// What `hello` says the engine can do: the probe of a hub compares it with what it needs.
+    pub capabilities: &'static [&'static str],
     /// The kind of the answer to a call, by its name.
     pub kind_of: fn(&str) -> Option<&'static str>,
 }
@@ -46,6 +48,7 @@ pub const RULES: FakeDialect = FakeDialect {
     vault_var: "RULES_VAULT",
     host_script: "rules-host.lua",
     list_key: "rules",
+    capabilities: &["hello", "snapshot", "list"],
     kind_of: rules_kind,
 };
 
@@ -94,6 +97,7 @@ mod tests {
         vault_var: "OTHER_VAULT",
         host_script: "other-host.lua",
         list_key: "others",
+        capabilities: &["hello"],
         kind_of: kind_none,
     };
 

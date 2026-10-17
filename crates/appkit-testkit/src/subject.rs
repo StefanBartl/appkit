@@ -30,7 +30,8 @@ pub trait Subject: Send + Sync {
     /// Start the hub of the app, with no engine and no page, on the address the test names.
     fn start(&self, cfg: StartConfig) -> BoxFuture<'_, std::io::Result<RunningServer>>;
 
-    /// The names (below the namespace of the app) of the routes that answer a GET and need a
-    /// session. The matrix asks each of them without one, and with every wrong kind of one.
+    /// The names (below the namespace of the app) of the routes that need a session, whatever
+    /// their method. The matrix sends a GET to each of them without one, and with every wrong
+    /// kind of one; the guard refuses by the path before the method or the route is looked at.
     fn data_routes(&self) -> Vec<&'static str>;
 }

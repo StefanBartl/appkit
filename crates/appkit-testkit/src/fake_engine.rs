@@ -205,16 +205,9 @@ fn respond(
     } else {
         if method == "hello" {
             doc["schemas"] = json!([1]);
-            doc["capabilities"] = json!([
-                "areas",
-                "done_preview",
-                "hello",
-                "list",
-                "next",
-                "ops",
-                "snapshot",
-                "task"
-            ]);
+            // What this engine can do, and not more: a hub that asks for anything else must find
+            // it missing.
+            doc["capabilities"] = json!(dialect.capabilities);
         }
         (documents.fill)(&call, &mut doc);
     }

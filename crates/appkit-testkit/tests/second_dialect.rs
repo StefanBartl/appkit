@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use appkit_hub::engine::{
     probe, CliEngine, CliEngineConfig, Engine, EngineDialect, EngineError, Method, MethodSpec,
+    ProbeProblem,
 };
 use appkit_hub::env::Env;
 use serde_json::{json, Value};
@@ -59,7 +60,25 @@ async fn the_engine_of_the_second_app_is_probed_by_its_own_hello() {
         .await
         .expect("probe");
     assert_eq!(info.schemas, vec![1]);
-    assert!(info.capabilities.iter().any(|c| c == "snapshot"));
+    // Exactly what this engine says it can do; nothing of the tasks engine.
+    assert_eq!(info.capabilities, ["hello", "snapshot", "list"]);
+}
+
+/// The probe holds the engine against what this dialect needs: an engine that cannot do one of
+/// those things is too old, and the problem names what is missing.
+#[tokio::test]
+async fn an_engine_that_lacks_what_the_dialect_needs_is_too_old() {
+    let needs_more = EngineDialect {
+        required_capabilities: &["hello", "snapshot", "task"],
+        ..DIALECT
+    };
+    let err = probe(&engine(Env::from_process()), &needs_more)
+        .await
+        .expect_err("too old");
+    match err {
+        ProbeProblem::TooOld { missing, .. } => assert_eq!(missing, ["task"]),
+        other => panic!("{other}"),
+    }
 }
 
 #[tokio::test]

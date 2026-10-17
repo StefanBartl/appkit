@@ -12,13 +12,16 @@ minimal app, and every app runs them for its own hub.
 
 ## What a request has to pass
 
-Every request goes through one guard, in this order. A refusal stops there. An app names paths and
-numbers (`GuardRules`); it cannot add, loosen or reorder a step.
+Every request goes through one guard, in this order. A refusal stops there. An app names paths
+(`GuardRules`) and chooses the numbers (`Limits`, `pairing_ttl`); it cannot add, remove or reorder a
+step. The numbers on this page are the defaults (`Limits::default()`, a pairing code of 60 s); an app
+that changes them says so in its own documentation, and the matrix of `appkit-testkit` runs with the
+defaults.
 
 | # | Check | Refusal | Why |
 |---|---|---|---|
 | 1 | `Host` is exactly `127.0.0.1:PORT`, `localhost:PORT` or `[::1]:PORT` (one header, ASCII) | 403 / 400 | DNS rebinding |
-| 2 | `Content-Length` is a number and not over the limit (1 MiB; 1 KiB for the two pairing routes, which take a few bytes) | 413 / 400 | memory |
+| 2 | `Content-Length` is a number and not over the limit (by default 1 MiB, and 1 KiB for the two pairing routes, which take a few bytes) | 413 / 400 | memory |
 | 3 | `Origin`, if sent, is exactly one of the three origins; `Sec-Fetch-Site`, if sent, is `same-origin` or `none` | 403 | cross-site requests |
 | 4 | the method is one the route knows (no `OPTIONS`, no CORS) | 405 | no cross-origin access at all |
 | 5 | a mutation without `Origin` is a program client: it must carry a credential and must not send `Sec-Fetch-Site` | 403 | a browser always sends `Origin` with a POST |
@@ -44,7 +47,7 @@ percent escapes or a trailing slash is not the list's path and needs a session t
 | Credential | What it is | What it allows |
 |---|---|---|
 | none | | the page, `GET /api/<ns>/hello` (name, version, instance id, whether the engine is ready, a short problem code; no data, no path) |
-| pairing code | 128 bits, one use, 60 s | `POST /auth/exchange` for a session token |
+| pairing code | 128 bits, one use, 60 s by default | `POST /auth/exchange` for a session token |
 | session token | 256 bits, in the memory of the hub only, a limited number open | the routes of the app |
 | control secret | 256 bits, in `control.secret` | `POST /api/control/pair`: mint a pairing code. Nothing else. |
 
@@ -105,7 +108,7 @@ switch that turns the host off.
   It gains no access by that.
 * **An administrator**, who can take ownership of the file.
 * **The terminal and the browser history.** The pairing link ends up in the terminal that printed
-  it and in the browser's history. That is why the code is single use and lives 60 s.
+  it and in the browser's history. That is why the code is single use and lives 60 s (by default).
 * **A page script in the app's own origin.** A script in the page would own the session. The policy
   above is the answer; what the app bundles is its own responsibility.
 
