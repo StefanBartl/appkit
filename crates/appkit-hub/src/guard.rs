@@ -31,15 +31,67 @@ pub struct GuardRules {
     coarse_post_paths: Vec<String>,
 }
 
+/// The routes of the core itself: an app cannot name one of them as its own.
+const CORE_PATHS: [&str; 6] = [
+    "/api/control/pair",
+    "/api/vaults",
+    "/api/vaults/add",
+    "/api/vaults/remove",
+    "/api/vaults/select",
+    "/auth/exchange",
+];
+
+/// Is `path` a plain route below `/api/`: one that the guard will ask a session for?
+fn plain_api_path(path: &str) -> bool {
+    path.len() > "/api/".len()
+        && path.starts_with("/api/")
+        && !path.ends_with('/')
+        && path
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'_' | b'-' | b'.'))
+        && path
+            .split('/')
+            .skip(1)
+            .all(|part| !part.is_empty() && part != "." && part != "..")
+}
+
 impl GuardRules {
+    /// The rules of an app.
+    ///
+    /// The paths are the app's own routes and are checked here, once, when the hub is made: a mistake in
+    /// them would open a route to anyone (`hello` needs no session) or hide the limit of another, so it
+    /// is a fault of the program that makes the hub and ends it at once, not a thing to be found at run
+    /// time.
+    ///
+    /// # Panics
+    ///
+    /// When `hello_path` or one of the `coarse_post_paths` is not a plain route below `/api/` (letters,
+    /// digits, `/ _ - .`, no empty or dot part, no trailing slash), or when `hello_path` is one of the
+    /// routes of the core (`/api/control/pair`, `/api/vaults*`).
     #[must_use]
     pub fn new(
         hello_path: impl Into<String>,
         coarse_post_paths: impl IntoIterator<Item = String>,
     ) -> Self {
+        let hello_path = hello_path.into();
+        assert!(
+            plain_api_path(&hello_path),
+            "the path of hello must be a plain route below /api/, not {hello_path:?}: hello needs no session"
+        );
+        assert!(
+            !CORE_PATHS.contains(&hello_path.as_str()),
+            "the path of hello is a route of the core: {hello_path:?}"
+        );
+        let coarse_post_paths: Vec<String> = coarse_post_paths.into_iter().collect();
+        for path in &coarse_post_paths {
+            assert!(
+                plain_api_path(path),
+                "a coarse POST path must be a plain route below /api/, not {path:?}"
+            );
+        }
         Self {
-            hello_path: hello_path.into(),
-            coarse_post_paths: coarse_post_paths.into_iter().collect(),
+            hello_path,
+            coarse_post_paths,
         }
     }
 
@@ -361,10 +413,36 @@ mod tests {
     }
 
     #[test]
-    fn what_an_app_names_never_leaves_the_api_prefix_or_the_classes() {
-        let r = GuardRules::new("/hello", ["/ops".to_owned()]);
-        // A hello outside /api/ would be an open route the guard did not mean: it is open only
-        // because the app said so, and the other paths outside /api/ stay "not ours".
+    fn what_an_app_names_cannot_open_a_route_outside_api_or_take_one_of_the_core() {
+        // The paths an app names are checked when the rules are made: each of these would open a route to
+        // anyone (hello needs no session) or shadow a route of the core.
+        let bad_hello = [
+            "/hello",
+            "/",
+            "/index.html",
+            "/api/",
+            "/api",
+            "/api/x/",
+            "/api//x",
+            "/api/../x",
+            "/api/x?y=1",
+            "/api/x y",
+            "/api/control/pair",
+            "/api/vaults",
+            "/api/vaults/select",
+            "/auth/exchange",
+        ];
+        for path in bad_hello {
+            let made = std::panic::catch_unwind(|| GuardRules::new(path, []));
+            assert!(made.is_err(), "hello at {path:?} was accepted");
+        }
+        for path in ["/ops", "/api/ops/", "/api/../ops", "/assets/x"] {
+            let made =
+                std::panic::catch_unwind(|| GuardRules::new("/api/ok/hello", [path.to_owned()]));
+            assert!(made.is_err(), "coarse path {path:?} was accepted");
+        }
+        // What the classes make of the paths outside /api/ does not depend on the rules.
+        let r = rules();
         assert!(matches!(classify("/ops", &r), Class::Other));
         assert!(matches!(classify("/auth/exchange", &r), Class::Exchange));
         assert!(matches!(
@@ -372,6 +450,16 @@ mod tests {
             Class::ControlPair
         ));
         assert!(matches!(classify("/assets/app.js", &r), Class::Shell));
+    }
+
+    #[test]
+    fn plain_routes_below_api_are_accepted() {
+        let r = GuardRules::new(
+            "/api/my-app_2/hello.v1",
+            ["/api/my-app_2/plan_for".to_owned()],
+        );
+        assert_eq!(r.hello_path(), "/api/my-app_2/hello.v1");
+        assert!(r.is_coarse("/api/my-app_2/plan_for"));
     }
 
     #[test]

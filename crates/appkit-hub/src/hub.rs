@@ -138,6 +138,10 @@ impl RunningServer {
 ///
 /// `routes` gets the core, so that a route can name a limit of its own.
 ///
+/// The runtime in `parts` is made before the address is bound: when binding fails (the port is taken) or the
+/// address is not loopback, it is dropped again and so stops what it started (watchers, jobs). An app that
+/// would rather not start them for nothing checks the address first.
+///
 /// # Errors
 ///
 /// An I/O error of binding, or `InvalidInput` for an address that is not loopback.
