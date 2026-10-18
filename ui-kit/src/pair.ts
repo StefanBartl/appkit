@@ -13,10 +13,26 @@ export interface HistoryLike {
 
 const CODE = /^[0-9a-f]{32,128}$/;
 
-/** The pairing code in the fragment, if there is one. Removes the fragment. */
-export function takePairingCode(location: LocationLike, history: HistoryLike): string | null {
+/** A code that was handed to the page by the shell around it (a native window sets it before the page runs). */
+function injectedCode(injected: unknown): string | null {
+  return typeof injected === 'string' && CODE.test(injected) ? injected : null;
+}
+
+/**
+ * The pairing code in the fragment, if there is one. Removes the fragment.
+ *
+ * `injected` is the code a native shell put into the page itself (the app reads the global it
+ * names, e.g. from an initialization script, and passes it here): a window of the shell has no
+ * address bar to carry a fragment. The fragment wins when both are there; the injected one is
+ * checked like it.
+ */
+export function takePairingCode(
+  location: LocationLike,
+  history: HistoryLike,
+  injected?: unknown,
+): string | null {
   const hash = location.hash.startsWith('#') ? location.hash.slice(1) : location.hash;
-  if (hash === '') return null;
+  if (hash === '') return injectedCode(injected);
   let code: string | null = null;
   for (const part of hash.split('&')) {
     const [key, value] = part.split('=');
@@ -24,5 +40,5 @@ export function takePairingCode(location: LocationLike, history: HistoryLike): s
   }
   // Whatever the fragment held, it is not left in the history.
   history.replaceState(null, '', location.pathname + location.search);
-  return code;
+  return code ?? injectedCode(injected);
 }
