@@ -32,12 +32,13 @@ pub struct GuardRules {
 }
 
 /// The routes of the core itself: an app cannot name one of them as its own.
-const CORE_PATHS: [&str; 6] = [
+const CORE_PATHS: [&str; 7] = [
     "/api/control/pair",
     "/api/vaults",
     "/api/vaults/add",
     "/api/vaults/remove",
     "/api/vaults/select",
+    "/api/vaults/update",
     "/auth/exchange",
 ];
 
@@ -429,7 +430,10 @@ mod tests {
             "/api/x y",
             "/api/control/pair",
             "/api/vaults",
+            "/api/vaults/add",
+            "/api/vaults/remove",
             "/api/vaults/select",
+            "/api/vaults/update",
             "/auth/exchange",
         ];
         for path in bad_hello {
