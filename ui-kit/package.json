@@ -13,6 +13,7 @@
     "./base.css": "./src/base.css",
     "./i18n": "./src/i18n.ts",
     "./markdown": "./src/markdown.ts",
+    "./nav": "./src/nav.ts",
     "./pair": "./src/pair.ts",
     "./sse": "./src/sse.ts",
     "./text": "./src/text.ts",

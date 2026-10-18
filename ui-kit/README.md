@@ -14,6 +14,7 @@ bundler (Vite with the Svelte plugin) compiles them, there is no build here.
 | One explanation popup for every element with `data-hint` (hover, focus, Escape) | `tooltip.ts` |
 | A server-sent-event reader over `fetch` (a bearer header, a backoff) | `sse.ts` |
 | The pairing code in the URL fragment, taken out of the address bar | `pair.ts` |
+| Back and Forward: each place is an entry of the tab's history, the state in `history.state`, not in the address | `nav.ts` |
 | Characters that hide or reverse text, made visible | `text.ts` |
 | Filling the holes of a text and choosing a language; the words belong to the app | `i18n.ts` |
 

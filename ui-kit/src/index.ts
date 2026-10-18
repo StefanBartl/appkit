@@ -3,6 +3,7 @@
 
 export { fill, pickLang } from './i18n';
 export { hostOf, MAX_SOURCE, parseMarkdown, safeHref, type Block, type Inline } from './markdown';
+export { installNav, type Nav, type NavHistory, type NavOptions, type NavWindow } from './nav';
 export { takePairingCode, type HistoryLike, type LocationLike } from './pair';
 export {
   backoffSeconds,
