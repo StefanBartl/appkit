@@ -384,7 +384,7 @@ pub fn set_security_headers(response: &mut Response, class: Class) {
             HeaderName::from_static("permissions-policy"),
             HeaderValue::from_static(
                 "camera=(), microphone=(), geolocation=(), payment=(), usb=(), \
-                 clipboard-read=(), clipboard-write=()",
+                 clipboard-read=(), clipboard-write=(self)",
             ),
         );
     }

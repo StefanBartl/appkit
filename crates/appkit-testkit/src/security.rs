@@ -601,6 +601,10 @@ pub async fn the_page_needs_no_token_and_has_its_headers(s: &dyn Subject) {
         .header("content-security-policy")
         .unwrap()
         .contains("frame-ancestors 'none'"));
+    // The page may write the clipboard (on a gesture), never read it, and no frame may do either.
+    let policy = r.header("permissions-policy").unwrap();
+    assert!(policy.contains("clipboard-write=(self)"), "{policy}");
+    assert!(policy.contains("clipboard-read=()"), "{policy}");
     // Anything else outside /api is not found, with no token needed.
     let r = get(&h, "/etc/passwd", &[]).await;
     assert_eq!(r.status, 404, "{r:?}");
