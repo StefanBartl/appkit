@@ -30,8 +30,13 @@ export interface NavOptions<S> {
 }
 
 export interface Nav<S> {
-  /** The page is at this state now. The first call marks the entry the page started on; a changed state is a new entry. */
-  record(state: S): void;
+  /**
+   * The page is at this state now. The first call marks the entry the page started on; a changed state is a new
+   * entry, unless `replace` is set: then it takes the place of the current entry. That is for a place that the page
+   * left by itself (the item that was open is gone): an entry of its own for it would be one that Back leads to and
+   * the page leaves again at once, which holds Back at that entry for ever.
+   */
+  record(state: S, options?: { replace?: boolean }): void;
   /** Stop listening. */
   stop(): void;
 }
@@ -59,10 +64,10 @@ export function installNav<S>(options: NavOptions<S>): Nav<S> {
   };
   options.window.addEventListener('popstate', onPop);
   return {
-    record(state) {
+    record(state, recordOptions) {
       if (current !== null && same(current, state)) return;
       const entry: Entry<S> = { appkitNav: 1, state };
-      if (current === null) options.history.replaceState(entry, '');
+      if (current === null || recordOptions?.replace === true) options.history.replaceState(entry, '');
       else options.history.pushState(entry, '');
       current = state;
     },

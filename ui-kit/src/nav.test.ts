@@ -62,6 +62,22 @@ describe('installNav', () => {
     expect(f.calls.at(-1)?.[0]).toBe('push');
   });
 
+  it('takes the place of the current entry when told to, and only then', () => {
+    const f = fixture();
+    f.nav.record({ view: 'overview', id: null });
+    f.nav.record({ view: 'rules', id: 'AA-01' });
+    // The open item is gone: the place is the list again, in the entry the item had.
+    f.nav.record({ view: 'rules', id: null }, { replace: true });
+    expect(f.calls.map((c) => c[0])).toEqual(['replace', 'push', 'replace']);
+    expect(f.calls[2]?.[1]).toEqual({ appkitNav: 1, state: { view: 'rules', id: null } });
+    // Without it a changed place is an entry again.
+    f.nav.record({ view: 'families', id: null });
+    expect(f.calls.at(-1)?.[0]).toBe('push');
+    // The same place twice is nothing, replace or not.
+    f.nav.record({ view: 'families', id: null }, { replace: true });
+    expect(f.calls).toHaveLength(4);
+  });
+
   it('leaves alone an entry it did not make or that holds something else', () => {
     const f = fixture();
     f.nav.record({ view: 'overview', id: null });
