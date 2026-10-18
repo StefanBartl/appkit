@@ -31,6 +31,15 @@ pub trait VaultAdmin<T>: Send + Sync {
     fn add<'a>(&'a self, name: &'a str, path: &'a str) -> BoxFuture<'a, Result<(), String>>;
     /// Forget a vault (never its files). The one that is read cannot go.
     fn remove<'a>(&'a self, name: &'a str) -> BoxFuture<'a, Result<(), String>>;
+    /// Change the folder of a vault that is remembered (it moved). The folder must exist. When the
+    /// vault is the one that is read, the engine is set up for the new folder first and its target
+    /// comes back, so that the server reads from there (`Some`); if that does not work nothing
+    /// changes. For any other vault the answer is `None`.
+    fn update<'a>(
+        &'a self,
+        name: &'a str,
+        path: &'a str,
+    ) -> BoxFuture<'a, Result<Option<T>, String>>;
     /// Set up the engine for a vault and remember the choice; the server then
     /// reads it. A vault that does not work is refused and nothing changes.
     fn select<'a>(&'a self, name: &'a str) -> BoxFuture<'a, Result<T, String>>;
@@ -139,6 +148,42 @@ pub async fn vaults_add<R: Runtime>(State(st): State<Arc<Core<R>>>, body: Bytes)
     }
 }
 
+/// `POST /api/vaults/update` `{ "name", "path", "confirm": true }`: the folder of a vault that is
+/// remembered changed. As with `add` the folder is the person's choice, so the request must say it
+/// was confirmed. If the vault is the one that is read, the runtime is made again for the new folder
+/// (the open streams of the old one end); a folder that does not work is refused and all stays.
+pub async fn vaults_update<R: Runtime>(State(st): State<Arc<Core<R>>>, body: Bytes) -> Response {
+    let Some(admin) = &st.vaults else {
+        return vaults_unavailable();
+    };
+    let map = match vault_request(&body, &["name", "path", "confirm"]) {
+        Ok(m) => m,
+        Err(r) => return r,
+    };
+    if map.get("confirm").and_then(serde_json::Value::as_bool) != Some(true) {
+        return error_body(
+            StatusCode::BAD_REQUEST,
+            "confirm_required",
+            "changing the folder of a vault must be confirmed",
+        );
+    }
+    let (name, path) = match (vault_text(&map, "name", 40), vault_text(&map, "path", 1024)) {
+        (Ok(n), Ok(p)) => (n, p),
+        (Err(r), _) | (_, Err(r)) => return r,
+    };
+    let _one_at_a_time = st.switching.lock().await;
+    match admin.update(&name, &path).await {
+        Ok(target) => {
+            let reread = target.is_some();
+            if let Some(target) = target {
+                st.replace_runtime((st.build)(target));
+            }
+            axum::Json(json!({ "ok": true, "reread": reread })).into_response()
+        }
+        Err(why) => error_body(StatusCode::BAD_REQUEST, "vault_refused", &why),
+    }
+}
+
 /// `POST /api/vaults/remove` `{ "name" }`: forget a vault; its files stay.
 pub async fn vaults_remove<R: Runtime>(State(st): State<Arc<Core<R>>>, body: Bytes) -> Response {
     let Some(admin) = &st.vaults else {
@@ -179,16 +224,7 @@ pub async fn vaults_select<R: Runtime>(State(st): State<Arc<Core<R>>>, body: Byt
         Ok(t) => t,
         Err(why) => return error_body(StatusCode::BAD_REQUEST, "vault_refused", &why),
     };
-    let next = (st.build)(target);
-    let old = {
-        let mut slot = st
-            .runtime
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        std::mem::replace(&mut *slot, Arc::new(next))
-    };
     // The open streams of the old vault end: their store is closed with it.
-    old.stop();
-    drop(old);
+    st.replace_runtime((st.build)(target));
     axum::Json(json!({ "ok": true, "active": name })).into_response()
 }

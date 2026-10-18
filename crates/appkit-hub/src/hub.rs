@@ -74,6 +74,20 @@ impl<R: Runtime> Core<R> {
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
         )
     }
+
+    /// Read another runtime from now on and stop the old one (its streams end, its store is closed).
+    /// A request that took the old one keeps it until it is done. For a change of vault, and for an
+    /// app that rebuilds the runtime of the vault it reads (its folder moved).
+    pub fn replace_runtime(&self, next: R) {
+        let old = {
+            let mut slot = self
+                .runtime
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            std::mem::replace(&mut *slot, Arc::new(next))
+        };
+        old.stop();
+    }
 }
 
 /// Everything the core needs to start, besides the routes of the app.
@@ -211,6 +225,10 @@ fn router<R: Runtime>(core: &Arc<Core<R>>, app: Router<Arc<Core<R>>>) -> Router 
             post(vaults_add::<R>).layer(DefaultBodyLimit::max(small)),
         )
         .route(
+            "/api/vaults/update",
+            post(vaults_update::<R>).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
             "/api/vaults/remove",
             post(vaults_remove::<R>).layer(DefaultBodyLimit::max(small)),
         )
@@ -334,6 +352,24 @@ mod tests {
         fn remove<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Result<(), String>> {
             Box::pin(async { Err("no".to_owned()) })
         }
+        // "a" is the vault that is read: moving it makes a target, moving another one does not;
+        // a path that is "bad" is refused.
+        fn update<'a>(
+            &'a self,
+            name: &'a str,
+            path: &'a str,
+        ) -> BoxFuture<'a, Result<Option<HubStatus>, String>> {
+            Box::pin(async move {
+                if path == "bad" {
+                    return Err("no vault there".to_owned());
+                }
+                Ok((name == "a").then(|| HubStatus {
+                    engine_ready: true,
+                    problem: None,
+                    capabilities: vec!["moved".to_owned()],
+                }))
+            })
+        }
         fn select<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Result<HubStatus, String>> {
             Box::pin(async {
                 Ok(HubStatus {
@@ -414,6 +450,97 @@ mod tests {
         let after = json_of(hello(State(core)).await).await;
         assert_eq!(after["engine"]["ready"], true);
         assert_eq!(after["engine"]["capabilities"][0], "second");
+    }
+
+    async fn update_with(core: &Arc<Core<OtherRuntime>>, body: &'static str) -> Response {
+        vaults_update(State(Arc::clone(core)), Bytes::from_static(body.as_bytes())).await
+    }
+
+    #[tokio::test]
+    async fn moving_the_vault_that_is_read_reads_it_from_the_new_folder() {
+        let first = Arc::new(OtherRuntime::new(HubStatus {
+            engine_ready: false,
+            problem: Some("engine_unreachable"),
+            capabilities: Vec::new(),
+        }));
+        let core = core_with(&first);
+        let done = update_with(&core, r#"{"name":"a","path":"/new","confirm":true}"#).await;
+        assert_eq!(done.status(), StatusCode::OK);
+        let body = json_of(done).await;
+        assert_eq!(
+            (body["ok"].clone(), body["reread"].clone()),
+            (true.into(), true.into())
+        );
+        assert!(first.stopped.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(core.rt().status().capabilities, vec!["moved".to_owned()]);
+    }
+
+    #[tokio::test]
+    async fn moving_another_vault_leaves_the_runtime_alone() {
+        let first = Arc::new(OtherRuntime::new(HubStatus {
+            engine_ready: true,
+            problem: None,
+            capabilities: Vec::new(),
+        }));
+        let core = core_with(&first);
+        let done = update_with(&core, r#"{"name":"b","path":"/new","confirm":true}"#).await;
+        assert_eq!(done.status(), StatusCode::OK);
+        assert_eq!(json_of(done).await["reread"], false);
+        assert!(!first.stopped.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(Arc::ptr_eq(&core.rt(), &first));
+    }
+
+    #[tokio::test]
+    async fn a_move_that_is_not_confirmed_or_not_wanted_changes_nothing() {
+        let first = Arc::new(OtherRuntime::new(HubStatus {
+            engine_ready: true,
+            problem: None,
+            capabilities: Vec::new(),
+        }));
+        let core = core_with(&first);
+        for (body, code) in [
+            (r#"{"name":"a","path":"/new"}"#, "confirm_required"),
+            (
+                r#"{"name":"a","path":"/new","confirm":false}"#,
+                "confirm_required",
+            ),
+            (
+                r#"{"name":"a","path":"bad","confirm":true}"#,
+                "vault_refused",
+            ),
+            (r#"{"name":"a","confirm":true}"#, "bad_request"),
+            (
+                r#"{"name":"a","path":"/x","confirm":true,"extra":1}"#,
+                "bad_request",
+            ),
+        ] {
+            let answer = update_with(&core, body).await;
+            assert_eq!(answer.status(), StatusCode::BAD_REQUEST, "{body}");
+            assert_eq!(json_of(answer).await["error"]["code"], code, "{body}");
+        }
+        assert!(!first.stopped.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(Arc::ptr_eq(&core.rt(), &first));
+    }
+
+    #[test]
+    fn replace_runtime_stops_the_old_one_and_reads_the_new_one() {
+        let status = |code| HubStatus {
+            engine_ready: false,
+            problem: Some(code),
+            capabilities: Vec::new(),
+        };
+        let first = Arc::new(OtherRuntime::new(status("first")));
+        let core = core_with(&first);
+        // A request that took the runtime before the swap keeps it.
+        let held = core.rt();
+
+        core.replace_runtime(OtherRuntime::new(status("second")));
+
+        assert!(first.stopped.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(held.status().problem, Some("first"));
+        let now = core.rt();
+        assert_eq!(now.status().problem, Some("second"));
+        assert!(!now.stopped.load(std::sync::atomic::Ordering::SeqCst));
     }
 
     #[tokio::test]
