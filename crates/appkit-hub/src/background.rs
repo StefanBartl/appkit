@@ -435,6 +435,86 @@ fn login_value_present(value: &str, reg: &dyn Registry) -> Result<bool, String> 
     Ok(reg.run(&args(&["query", RUN_KEY, "/v", value]))?.success)
 }
 
+/// The `Uninstall` key of the current user: the setup of the app (NSIS, mode current user) writes
+/// its entry for "Apps and features" under it, named by the product name (the name of the app).
+const UNINSTALL_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall";
+
+/// An installation made by the setup of the app (not by `install`), as far as it can be found out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetupInstall {
+    /// The folder the setup installed to (`InstallLocation`), when it says one.
+    pub location: Option<PathBuf>,
+}
+
+/// The data of a value in the output of `reg query`: `    <name>    REG_SZ    <data>`.
+fn reg_value(stdout: &str, name: &str) -> Option<String> {
+    stdout.lines().find_map(|line| {
+        let line = line.trim();
+        let rest = line.strip_prefix(name)?;
+        if !rest.starts_with(char::is_whitespace) {
+            return None;
+        }
+        let (_, data) = rest.trim_start().split_once(char::is_whitespace)?;
+        let data = data.trim();
+        (!data.is_empty()).then(|| data.to_owned())
+    })
+}
+
+/// Whether the setup of the app installed it: its entry under the `Uninstall` key, found through
+/// `reg` (the value `InstallLocation` is read when there is one).
+fn setup_install_in(
+    app: &Background<'_>,
+    reg: &dyn Registry,
+) -> Result<Option<SetupInstall>, String> {
+    let key = format!(r"{UNINSTALL_KEY}\{}", app.identity().app);
+    let found = reg.run(&args(&["query", &key, "/v", "InstallLocation"]))?;
+    if found.success {
+        let location = reg_value(&found.stdout, "InstallLocation").map(PathBuf::from);
+        return Ok(Some(SetupInstall { location }));
+    }
+    // The key without that value is an installation all the same.
+    let key_only = reg.run(&args(&["query", &key]))?;
+    Ok(key_only.success.then_some(SetupInstall { location: None }))
+}
+
+/// Whether the setup of the app installed it (Windows: the `Uninstall` key of the user; Linux: a
+/// program of the package manager at `/usr/bin/<binary>`). `install` finds it and does not build a
+/// second one beside it.
+///
+/// # Errors
+///
+/// `reg.exe` could not be run at all.
+pub fn setup_install(app: &Background<'_>) -> Result<Option<SetupInstall>, String> {
+    if cfg!(windows) {
+        return setup_install_in(app, &RegExe(system_program("reg.exe")?));
+    }
+    let packaged = Path::new("/usr/bin").join(app.identity().binary);
+    Ok(packaged.is_file().then_some(SetupInstall {
+        location: packaged.parent().map(Path::to_path_buf),
+    }))
+}
+
+/// What `install` says when the setup installed the app: the way to repair or remove it.
+fn setup_refusal(found: &SetupInstall) -> String {
+    let at = found
+        .location
+        .as_ref()
+        .map_or(String::new(), |p| format!(" ({})", p.display()));
+    format!(
+        "the app is installed by its setup{at}: run the setup again to repair it, or its \
+         uninstaller to remove it; `install` would build a second copy beside it"
+    )
+}
+
+/// What `uninstall` says about a setup installation: its files are the uninstaller's to remove.
+fn setup_left_text(found: &SetupInstall) -> String {
+    let at = found
+        .location
+        .as_ref()
+        .map_or(String::new(), |p| format!(" at {}", p.display()));
+    format!("the setup's installation{at} is left: remove it with the uninstaller of the setup\n")
+}
+
 /// Windows keeps what a *packaged* app (an MSIX, like the Claude app) and its
 /// child processes write below `AppData`, and into the registry, in a private
 /// store of that app. A terminal of the user does not see any of it: the
@@ -625,6 +705,9 @@ async fn install_steps(
     out: &mut String,
 ) -> Result<(), String> {
     let env = Env::from_process();
+    if let Some(found) = setup_install(app)? {
+        return Err(setup_refusal(&found));
+    }
     let dir = install_dir(app, &env)?;
     let from = std::env::current_exe().map_err(|e| format!("own program not found: {e}"))?;
     let name = std::ffi::OsString::from(app.identity().program_file());
@@ -843,6 +926,9 @@ async fn uninstall_steps(app: &Background<'_>, opts: UninstallOptions) -> Result
         ));
     }
     out.push_str(&program_left_text(app, &exe));
+    if let Ok(Some(found)) = setup_install(app) {
+        out.push_str(&setup_left_text(&found));
+    }
     if failed.is_empty() {
         Ok(out)
     } else {
@@ -1368,6 +1454,81 @@ ERROR: Access is denied.
                 _ => answer(false, String::new()),
             }
         }
+    }
+
+    /// A registry that holds the `Uninstall` entries it is given: key -> data of `InstallLocation`
+    /// (`None`: the key has no such value).
+    struct UninstallRegistry(Vec<(String, Option<&'static str>)>);
+
+    impl Registry for UninstallRegistry {
+        fn run(&self, args: &[OsString]) -> Result<RegOutput, String> {
+            let args: Vec<String> = args
+                .iter()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect();
+            let entry = self.0.iter().find(|(k, _)| Some(k) == args.get(1));
+            let stdout = match (entry, args.get(2).map(String::as_str)) {
+                (Some((k, Some(at))), Some("/v")) => {
+                    format!("\r\n{k}\r\n    InstallLocation    REG_SZ    {at}\r\n\r\n")
+                }
+                (Some((k, _)), None) => format!("\r\n{k}\r\n    Publisher    REG_SZ    x\r\n"),
+                _ => String::new(),
+            };
+            let success = !stdout.is_empty();
+            Ok(RegOutput {
+                success,
+                stdout,
+                stderr: String::new(),
+            })
+        }
+    }
+
+    fn setup_key() -> String {
+        format!(r"{UNINSTALL_KEY}\rules-desktop")
+    }
+
+    #[test]
+    fn a_setup_installation_is_found_by_its_uninstall_entry_of_this_app_only() {
+        let at = r"C:\Users\a b\AppData\Local\rules-desktop";
+        let reg = UninstallRegistry(vec![(setup_key(), Some(at))]);
+        let found = setup_install_in(&APP, &reg).unwrap().unwrap();
+        assert_eq!(found.location, Some(PathBuf::from(at)));
+        // The entry of another app is not ours.
+        let other = UninstallRegistry(vec![(format!(r"{UNINSTALL_KEY}\tasks-desktop"), Some(at))]);
+        assert_eq!(setup_install_in(&APP, &other).unwrap(), None);
+        // Nothing is installed by a setup.
+        assert_eq!(
+            setup_install_in(&APP, &UninstallRegistry(Vec::new())).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn an_entry_without_a_location_is_an_installation_all_the_same() {
+        let reg = UninstallRegistry(vec![(setup_key(), None)]);
+        let found = setup_install_in(&APP, &reg).unwrap().unwrap();
+        assert_eq!(found.location, None);
+        // A registry that cannot be run is an error, not "nothing installed".
+        let mut gone = FakeRegistry::new(None);
+        gone.missing = true;
+        assert!(setup_install_in(&APP, &gone).is_err());
+    }
+
+    #[test]
+    fn the_refusal_names_the_way_to_repair_and_to_remove() {
+        let said = setup_refusal(&SetupInstall {
+            location: Some(PathBuf::from("/x/rules")),
+        });
+        assert!(
+            said.contains("/x/rules") || said.contains(r"\x\rules"),
+            "{said}"
+        );
+        assert!(
+            said.contains("run the setup again") && said.contains("uninstaller"),
+            "{said}"
+        );
+        assert!(!setup_refusal(&SetupInstall { location: None }).contains("()"));
+        assert!(setup_left_text(&SetupInstall { location: None }).contains("uninstaller"));
     }
 
     const EXE: &str = r"C:\Program Files\tasks\tasks-hub.exe";
