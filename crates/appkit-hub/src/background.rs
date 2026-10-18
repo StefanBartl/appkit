@@ -435,9 +435,14 @@ fn login_value_present(value: &str, reg: &dyn Registry) -> Result<bool, String> 
     Ok(reg.run(&args(&["query", RUN_KEY, "/v", value]))?.success)
 }
 
-/// The `Uninstall` key of the current user: the setup of the app (NSIS, mode current user) writes
-/// its entry for "Apps and features" under it, named by the product name (the name of the app).
-const UNINSTALL_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall";
+/// The `Uninstall` keys a setup of the app writes its entry for "Apps and features" under, named by
+/// the product name (the name of the app): the current user (NSIS, mode current user), the machine
+/// (mode all users) and the 32-bit view of the machine (a setup made as a 32-bit program).
+const UNINSTALL_KEYS: [&str; 3] = [
+    r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall",
+    r"HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall",
+    r"HKLM\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+];
 
 /// An installation made by the setup of the app (not by `install`), as far as it can be found out.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -460,24 +465,29 @@ fn reg_value(stdout: &str, name: &str) -> Option<String> {
     })
 }
 
-/// Whether the setup of the app installed it: its entry under the `Uninstall` key, found through
-/// `reg` (the value `InstallLocation` is read when there is one).
+/// Whether the setup of the app installed it: its entry under one of the `Uninstall` keys, found
+/// through `reg` (the value `InstallLocation` is read when there is one). The first key that has
+/// the entry answers.
 fn setup_install_in(
     app: &Background<'_>,
     reg: &dyn Registry,
 ) -> Result<Option<SetupInstall>, String> {
-    let key = format!(r"{UNINSTALL_KEY}\{}", app.identity().app);
-    let found = reg.run(&args(&["query", &key, "/v", "InstallLocation"]))?;
-    if found.success {
-        let location = reg_value(&found.stdout, "InstallLocation").map(PathBuf::from);
-        return Ok(Some(SetupInstall { location }));
+    for root in UNINSTALL_KEYS {
+        let key = format!(r"{root}\{}", app.identity().app);
+        let found = reg.run(&args(&["query", &key, "/v", "InstallLocation"]))?;
+        if found.success {
+            let location = reg_value(&found.stdout, "InstallLocation").map(PathBuf::from);
+            return Ok(Some(SetupInstall { location }));
+        }
+        // The key without that value is an installation all the same.
+        if reg.run(&args(&["query", &key]))?.success {
+            return Ok(Some(SetupInstall { location: None }));
+        }
     }
-    // The key without that value is an installation all the same.
-    let key_only = reg.run(&args(&["query", &key]))?;
-    Ok(key_only.success.then_some(SetupInstall { location: None }))
+    Ok(None)
 }
 
-/// Whether the setup of the app installed it (Windows: the `Uninstall` key of the user; Linux: a
+/// Whether the setup of the app installed it (Windows: the `Uninstall` keys of the user and of the machine; Linux: a
 /// program of the package manager at `/usr/bin/<binary>`). `install` finds it and does not build a
 /// second one beside it.
 ///
@@ -504,6 +514,13 @@ fn setup_refusal(found: &SetupInstall) -> String {
         "the app is installed by its setup{at}: run the setup again to repair it, or its \
          uninstaller to remove it; `install` would build a second copy beside it"
     )
+}
+
+/// The closing line of `uninstall` when a setup installed the app (nothing when none did).
+fn push_setup_note(out: &mut String, found: Option<&SetupInstall>) {
+    if let Some(found) = found {
+        out.push_str(&setup_left_text(found));
+    }
 }
 
 /// What `uninstall` says about a setup installation: its files are the uninstaller's to remove.
@@ -704,10 +721,21 @@ async fn install_steps(
     opts: InstallOptions,
     out: &mut String,
 ) -> Result<(), String> {
-    let env = Env::from_process();
-    if let Some(found) = setup_install(app)? {
+    install_steps_beside(app, opts, out, setup_install(app)?).await
+}
+
+/// The steps of `install` when `setup` is what a setup of the app left (found by the caller): that is a
+/// refusal before anything is touched.
+async fn install_steps_beside(
+    app: &Background<'_>,
+    opts: InstallOptions,
+    out: &mut String,
+    setup: Option<SetupInstall>,
+) -> Result<(), String> {
+    if let Some(found) = setup {
         return Err(setup_refusal(&found));
     }
+    let env = Env::from_process();
     let dir = install_dir(app, &env)?;
     let from = std::env::current_exe().map_err(|e| format!("own program not found: {e}"))?;
     let name = std::ffi::OsString::from(app.identity().program_file());
@@ -926,9 +954,7 @@ async fn uninstall_steps(app: &Background<'_>, opts: UninstallOptions) -> Result
         ));
     }
     out.push_str(&program_left_text(app, &exe));
-    if let Ok(Some(found)) = setup_install(app) {
-        out.push_str(&setup_left_text(&found));
-    }
+    push_setup_note(&mut out, setup_install(app).ok().flatten().as_ref());
     if failed.is_empty() {
         Ok(out)
     } else {
@@ -1484,7 +1510,12 @@ ERROR: Access is denied.
     }
 
     fn setup_key() -> String {
-        format!(r"{UNINSTALL_KEY}\rules-desktop")
+        setup_key_in(0)
+    }
+
+    /// The entry of this app under one of the `Uninstall` keys (0: the user, 1: the machine, 2: its 32-bit view).
+    fn setup_key_in(which: usize) -> String {
+        format!(r"{}\rules-desktop", UNINSTALL_KEYS[which])
     }
 
     #[test]
@@ -1494,12 +1525,75 @@ ERROR: Access is denied.
         let found = setup_install_in(&APP, &reg).unwrap().unwrap();
         assert_eq!(found.location, Some(PathBuf::from(at)));
         // The entry of another app is not ours.
-        let other = UninstallRegistry(vec![(format!(r"{UNINSTALL_KEY}\tasks-desktop"), Some(at))]);
+        let other = UninstallRegistry(vec![(
+            format!(r"{}\tasks-desktop", UNINSTALL_KEYS[0]),
+            Some(at),
+        )]);
         assert_eq!(setup_install_in(&APP, &other).unwrap(), None);
         // Nothing is installed by a setup.
         assert_eq!(
             setup_install_in(&APP, &UninstallRegistry(Vec::new())).unwrap(),
             None
+        );
+    }
+
+    #[test]
+    fn a_setup_for_all_users_is_found_too_in_either_view_of_the_machine() {
+        let at = r"C:\Program Files\rules-desktop";
+        for which in [1, 2] {
+            let reg = UninstallRegistry(vec![(setup_key_in(which), Some(at))]);
+            let found = setup_install_in(&APP, &reg).unwrap().unwrap();
+            assert_eq!(found.location, Some(PathBuf::from(at)), "key {which}");
+            // ... also an entry of the machine without a location.
+            let bare = UninstallRegistry(vec![(setup_key_in(which), None)]);
+            assert_eq!(
+                setup_install_in(&APP, &bare).unwrap(),
+                Some(SetupInstall { location: None }),
+                "key {which}"
+            );
+        }
+        // The entry of the user answers first when both are there.
+        let both = UninstallRegistry(vec![
+            (setup_key_in(1), Some(at)),
+            (setup_key_in(0), Some(r"C:\Users\a\rules-desktop")),
+        ]);
+        let found = setup_install_in(&APP, &both).unwrap().unwrap();
+        assert_eq!(
+            found.location,
+            Some(PathBuf::from(r"C:\Users\a\rules-desktop"))
+        );
+    }
+
+    #[tokio::test]
+    async fn install_refuses_before_it_touches_anything_when_a_setup_installed_the_app() {
+        let found = SetupInstall {
+            location: Some(PathBuf::from("/x/rules")),
+        };
+        let mut out = String::new();
+        let why = install_steps_beside(&APP, InstallOptions::default(), &mut out, Some(found))
+            .await
+            .unwrap_err();
+        assert!(
+            why.contains("run the setup again") && why.contains("uninstaller"),
+            "{why}"
+        );
+        assert_eq!(out, "", "something was done before the refusal");
+    }
+
+    #[test]
+    fn uninstall_names_the_files_of_a_setup_as_the_uninstallers_and_says_nothing_without_one() {
+        let mut out = String::from("before\n");
+        push_setup_note(&mut out, None);
+        assert_eq!(out, "before\n");
+        push_setup_note(
+            &mut out,
+            Some(&SetupInstall {
+                location: Some(PathBuf::from("/x/rules")),
+            }),
+        );
+        assert!(
+            out.contains("uninstaller") && out.contains("rules"),
+            "{out}"
         );
     }
 
