@@ -516,6 +516,36 @@ fn setup_refusal(found: &SetupInstall) -> String {
     )
 }
 
+/// What `uninstall` says and does after the hub is stopped and the login entry and the link are gone: the settings
+/// (kept, or removed with `--purge-settings`), the program file that is left, and the files of a setup installation
+/// that are the uninstaller's. `setup` is what was found of a setup (the caller asks for it).
+fn uninstall_closing(
+    app: &Background<'_>,
+    env: &Env,
+    opts: UninstallOptions,
+    exe: &Path,
+    setup: Option<&SetupInstall>,
+    out: &mut String,
+    failed: &mut Vec<String>,
+) {
+    if opts.purge_settings {
+        match instance::config_folder(env, app.identity()) {
+            Ok(dir) => match purge_settings(app, &dir) {
+                Ok(text) => out.push_str(&text),
+                Err(e) => failed.push(e),
+            },
+            Err(e) => failed.push(e),
+        }
+    } else if let Ok(dir) = instance::config_folder(env, app.identity()) {
+        out.push_str(&format!(
+            "your settings stay in {} (`uninstall --purge-settings` removes them)\n",
+            dir.display()
+        ));
+    }
+    out.push_str(&program_left_text(app, exe));
+    push_setup_note(out, setup);
+}
+
 /// The closing line of `uninstall` when a setup installed the app (nothing when none did).
 fn push_setup_note(out: &mut String, found: Option<&SetupInstall>) {
     if let Some(found) = found {
@@ -942,19 +972,15 @@ async fn uninstall_steps(app: &Background<'_>, opts: UninstallOptions) -> Result
         step(autostart(app, Autostart::Off), &mut out);
         step(remove_shortcut(app, &env), &mut out);
     }
-    if opts.purge_settings {
-        match instance::config_folder(&env, app.identity()) {
-            Ok(dir) => step(purge_settings(app, &dir), &mut out),
-            Err(e) => failed.push(e),
-        }
-    } else if let Ok(dir) = instance::config_folder(&env, app.identity()) {
-        out.push_str(&format!(
-            "your settings stay in {} (`uninstall --purge-settings` removes them)\n",
-            dir.display()
-        ));
-    }
-    out.push_str(&program_left_text(app, &exe));
-    push_setup_note(&mut out, setup_install(app).ok().flatten().as_ref());
+    uninstall_closing(
+        app,
+        &env,
+        opts,
+        &exe,
+        setup_install(app).ok().flatten().as_ref(),
+        &mut out,
+        &mut failed,
+    );
     if failed.is_empty() {
         Ok(out)
     } else {
@@ -1578,6 +1604,67 @@ ERROR: Access is denied.
             "{why}"
         );
         assert_eq!(out, "", "something was done before the refusal");
+    }
+
+    /// The closing of `uninstall` in a config folder of its own: what it says, with and without a setup, and what
+    /// `--purge-settings` removes (the files of the kit, nothing else).
+    #[test]
+    fn the_closing_of_uninstall_keeps_or_removes_the_settings_and_names_a_setup() {
+        let dir =
+            std::env::temp_dir().join(format!("appkit-uninstall-closing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("config.json"), "{}").unwrap();
+        std::fs::write(dir.join("mine.txt"), "not the kit's").unwrap();
+        let env = Env::from_pairs([(
+            APP.identity().var("CONFIG_DIR"),
+            dir.to_string_lossy().into_owned(),
+        )]);
+        let exe = Path::new("/x/rules-desktop");
+        let setup = SetupInstall {
+            location: Some(PathBuf::from("/x/setup")),
+        };
+
+        // Kept, with a setup: the folder, the program file and the uninstaller of the setup are named.
+        let (mut out, mut failed) = (String::new(), Vec::new());
+        uninstall_closing(
+            &APP,
+            &env,
+            UninstallOptions::default(),
+            exe,
+            Some(&setup),
+            &mut out,
+            &mut failed,
+        );
+        assert!(failed.is_empty(), "{failed:?}");
+        assert!(out.contains("your settings stay in"), "{out}");
+        assert!(out.contains("the program file is left at"), "{out}");
+        assert!(out.contains("uninstaller of the setup"), "{out}");
+        assert!(dir.join("config.json").exists());
+
+        // Without a setup: no line about one.
+        let (mut plain, mut failed) = (String::new(), Vec::new());
+        uninstall_closing(
+            &APP,
+            &env,
+            UninstallOptions::default(),
+            exe,
+            None,
+            &mut plain,
+            &mut failed,
+        );
+        assert!(!plain.contains("setup"), "{plain}");
+
+        // Purged: the file of the kit goes, a file that is not the kit's stays.
+        let (mut purged, mut failed) = (String::new(), Vec::new());
+        let opts = UninstallOptions {
+            purge_settings: true,
+        };
+        uninstall_closing(&APP, &env, opts, exe, None, &mut purged, &mut failed);
+        assert!(failed.is_empty(), "{failed:?}");
+        assert!(!dir.join("config.json").exists());
+        assert!(dir.join("mine.txt").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
