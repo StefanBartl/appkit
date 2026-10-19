@@ -7,7 +7,7 @@ bundler (Vite with the Svelte plugin) compiles them, there is no build here.
 |---|---|
 | The design tokens in ten groups: surfaces, text, lines and accent (`--line`, `--accent-soft`, `--focus`), meaning colours, depth and marks (`--shadow`, `--shadow-sm`, `--backdrop`, `--mark`), shape, type (`--font-size`, `--line-height`), the theme (`light-dark()` follows the system, `data-theme` on the root overrides it), the base rules, and the check `tools/check-color-literals.py` (which every app runs over its own page too): no hex colour or colour function where the CSS of a page states a colour, outside the tokens; scripts, `.ts` and `.svg` files and named colours are not looked at. `--border` is an alias of `--line` while the pages move | `tokens.css` |
 | The base rules that come with them: box model, page, focus ring, headings, the hint popup, the info button, `.sr-only`, reduced motion | `base.css` |
-| The menu bar of an application (a row of menus with the keys of the ARIA pattern) | `MenuBar.svelte` |
+| The menu bar of an application (a row of menus with the keys of the ARIA pattern, sections with a heading and a line, shortcuts on the right, Alt+letter mnemonics, type-ahead) | `MenuBar.svelte`, `menu.ts` |
 | A choice of any number of values, with a search when the list is long | `MultiSelect.svelte` |
 | The "what does this mean" button beside a label | `Info.svelte` |
 | A markdown reader that draws text as elements, never as an HTML string | `markdown.ts`, `Blocks.svelte`, `Inlines.svelte` |
@@ -37,6 +37,12 @@ import { installTooltips, tooltip } from 'appkit-ui/tooltip';
 
 The kit has no words: `installTooltips` takes the name of its region from the app (`regionLabel`), the components
 take every label as a prop, and `i18n.ts` only fills holes and picks a language.
+
+A menu is a list of items; `{ kind: 'section', label }` starts a group with a heading (a line is drawn before it),
+`{ kind: 'separator' }` is a line of its own, and an action, radio or check item may carry `shortcut: 'Ctrl+N'`. The
+shortcut is shown on the right and announced (`aria-keyshortcuts`); the app binds the key itself. A menu with
+`mnemonic: 'p'` opens on Alt+P and shows the letter underlined. Inside an open menu the arrow keys, Home and End walk
+the items, a letter goes to the next item that starts with it, Left and Right change the menu, Escape closes.
 
 A hint is the text of the app, from its dictionary. Set it as `data-hint` (optionally `data-hint-title`, and
 `data-hint-delay` in milliseconds), or with the action, which sets exactly these:

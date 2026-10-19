@@ -2,6 +2,16 @@
 // app takes only what it uses; the styles are `appkit-ui/tokens.css` and `appkit-ui/base.css`.
 
 export { fill, pickLang } from './i18n';
+export {
+  menuForMnemonic,
+  splitMnemonic,
+  toBlocks,
+  TYPE_AHEAD_MS,
+  typeAheadIndex,
+  type Menu,
+  type MenuBlock,
+  type MenuItem,
+} from './menu';
 export { hostOf, MAX_SOURCE, parseMarkdown, safeHref, type Block, type Inline } from './markdown';
 export { installNav, type Nav, type NavHistory, type NavOptions, type NavWindow } from './nav';
 export { takePairingCode, type HistoryLike, type LocationLike } from './pair';
