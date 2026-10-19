@@ -37,6 +37,51 @@ export const HIDE_DELAY_MS = 150;
 
 export const TIP_ID = 'hint-tip';
 
+/** The longest pause an element may ask for with `data-hint-delay`. */
+export const MAX_DELAY_MS = 5000;
+
+/** The pause of one element: its `data-hint-delay` when that is a number of milliseconds, else the default. */
+export function hintDelay(raw: string | undefined): number {
+  if (raw === undefined || !/^\d+$/.test(raw.trim())) return SHOW_DELAY_MS;
+  return Math.min(Number(raw), MAX_DELAY_MS);
+}
+
+/** What the `tooltip` action takes: a text, or a text with a title and a pause of its own (milliseconds). */
+export type TooltipParams = string | { text: string; title?: string; delay?: number };
+
+/** The `data-hint*` attributes of the params; an empty text gives none, so the element has no popup. */
+export function hintAttributes(params: TooltipParams): Record<string, string> {
+  const p = typeof params === 'string' ? { text: params } : params;
+  if (p.text === '') return {};
+  const attrs: Record<string, string> = { 'data-hint': p.text };
+  if (p.title) attrs['data-hint-title'] = p.title;
+  if (p.delay !== undefined && Number.isFinite(p.delay) && p.delay >= 0) {
+    attrs['data-hint-delay'] = String(Math.floor(p.delay));
+  }
+  return attrs;
+}
+
+const HINT_ATTRIBUTES = ['data-hint', 'data-hint-title', 'data-hint-delay'];
+
+/**
+ * Svelte action: `<button use:tooltip={t('save.hint')}>` or `use:tooltip={{ text, title, delay }}`. It only sets the
+ * attributes the popup of `installTooltips` looks for, so the element must be reachable by keyboard (a button, a
+ * link, or `tabindex="0"`) for the popup to show on focus.
+ */
+export function tooltip(node: HTMLElement, params: TooltipParams): { update(next: TooltipParams): void; destroy(): void } {
+  const apply = (p: TooltipParams): void => {
+    for (const name of HINT_ATTRIBUTES) node.removeAttribute(name);
+    for (const [name, value] of Object.entries(hintAttributes(p))) node.setAttribute(name, value);
+  };
+  apply(params);
+  return {
+    update: apply,
+    destroy: () => {
+      for (const name of HINT_ATTRIBUTES) node.removeAttribute(name);
+    },
+  };
+}
+
 /** Join an id into a space separated list (`aria-describedby`) and take it out again. */
 export function withToken(list: string | null, token: string): string {
   const tokens = (list ?? '').split(/\s+/).filter(Boolean);
@@ -65,6 +110,9 @@ export function installTooltips(
   tip.id = TIP_ID;
   tip.className = 'hint-tip';
   tip.setAttribute('role', 'tooltip');
+  // Closed from the start: `tip.hidden` is what the Escape key and the hide timers ask, and a popup that never
+  // opened must not take the Escape of a dialog or a menu.
+  tip.hidden = true;
   host.appendChild(tip);
   doc.body.appendChild(host);
   // The name of the region is the app's word (its dictionary): the kit has none, so the app must give one.
@@ -134,7 +182,15 @@ export function installTooltips(
     if (current !== el) describedBefore = el.getAttribute('aria-describedby');
     current = el;
     viaFocus = viaFocus || byFocus;
-    tip.textContent = text;
+    tip.replaceChildren();
+    const title = el.dataset.hintTitle ?? '';
+    if (title !== '') {
+      const heading = doc.createElement('strong');
+      heading.className = 'hint-title';
+      heading.textContent = title;
+      tip.appendChild(heading);
+    }
+    tip.appendChild(doc.createTextNode(text));
     host.setAttribute('aria-label', regionLabel());
     // A modal dialog lies in the top layer and makes the rest of the page inert: a popup in the body would be behind it
     // and could not be reached with the pointer. While a hint of the dialog is open the popup lives in the dialog.
@@ -160,7 +216,7 @@ export function installTooltips(
     cancelHide();
     if (el === current) return;
     cancelShow();
-    showTimer = win.setTimeout(() => show(el, false), SHOW_DELAY_MS);
+    showTimer = win.setTimeout(() => show(el, false), hintDelay(el.dataset.hintDelay));
   };
   const onOut = (e: Event): void => {
     cancelShow();

@@ -18,12 +18,17 @@ export {
 export { hasHidden, markHidden } from './text';
 export {
   HIDE_DELAY_MS,
+  hintAttributes,
+  hintDelay,
   installTooltips,
+  MAX_DELAY_MS,
   placeTip,
   SHOW_DELAY_MS,
   TIP_ID,
+  tooltip,
   withoutToken,
   withToken,
   type Box,
   type TooltipOptions,
+  type TooltipParams,
 } from './tooltip';

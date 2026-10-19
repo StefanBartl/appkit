@@ -32,11 +32,23 @@ pnpm add "git+https://github.com/StefanBartl/appkit.git#vX.Y.Z&path:ui-kit"
 import 'appkit-ui/tokens.css';
 import 'appkit-ui/base.css';
 import MenuBar, { type Menu } from 'appkit-ui/MenuBar.svelte';
-import { installTooltips } from 'appkit-ui/tooltip';
+import { installTooltips, tooltip } from 'appkit-ui/tooltip';
 ```
 
 The kit has no words: `installTooltips` takes the name of its region from the app (`regionLabel`), the components
 take every label as a prop, and `i18n.ts` only fills holes and picks a language.
+
+A hint is the text of the app, from its dictionary. Set it as `data-hint` (optionally `data-hint-title`, and
+`data-hint-delay` in milliseconds), or with the action, which sets exactly these:
+
+```svelte
+<button use:tooltip={t('save.hint')}>Save</button>
+<span tabindex="0" use:tooltip={{ text: t('live.hint'), title: t('live.title'), delay: 600 }}>live</span>
+```
+
+The element must be reachable by keyboard (a button, a link, or `tabindex="0"`): the popup shows on hover after the
+pause and at once on focus, stays while the pointer is on it, and goes with Escape, on scrolling and when the pointer
+or the focus leaves.
 
 To work on the kit and an app at once, point the app at the checkout (`pnpm add link:../path/to/appkit/ui-kit`) and
 put the tag back before committing.
