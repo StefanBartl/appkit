@@ -2,6 +2,15 @@
 // app takes only what it uses; the styles are `appkit-ui/tokens.css` and `appkit-ui/base.css`.
 
 export {
+  Preferences,
+  StreamSession,
+  type Connection,
+  type PreferenceKeys,
+  type Profile,
+  type StreamDeps,
+  type Theme,
+} from './session.svelte';
+export {
   cacheableClass,
   indexedDbStore,
   type CacheStore,

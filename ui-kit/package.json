@@ -22,6 +22,7 @@
     "./nav": "./src/nav.ts",
     "./palette": "./src/palette.ts",
     "./pair": "./src/pair.ts",
+    "./session": "./src/session.svelte.ts",
     "./shell-check": "./src/shell-check.js",
     "./shell.golden.json": "./src/shell.golden.json",
     "./sse": "./src/sse.ts",
