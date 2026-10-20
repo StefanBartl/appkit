@@ -15,6 +15,8 @@ bundler (Vite with the Svelte plugin) compiles them, there is no build here.
 | The "what does this mean" button beside a label | `Info.svelte` |
 | A markdown reader that draws text as elements, never as an HTML string | `markdown.ts`, `Blocks.svelte`, `Inlines.svelte` |
 | One explanation popup for every element with `data-hint` (hover, focus, Escape) | `tooltip.ts` |
+| The hub client every app extends (`class Hub extends HubClient`): the session as a bearer token and nothing else (no cookie, no cache, no referrer), a late refusal of an old token ignored, the refusal as `ApiError`, the pairing code traded for a token, `hello`, `snapshot` with its tag, `rescan`, and `postJson`/`post` for the calls of the app. The app names where its routes live (`/api/tasks`) and adds its own calls | `client.ts` |
+| What an app that keeps a copy in the browser shares: `cacheableClass` (only `public` and `internal`, fail closed) and an IndexedDB store behind `CacheStore` (every failure is a miss). What is kept, and how a copy is cut, is the app's | `cache.ts` |
 | A server-sent-event reader over `fetch` (a bearer header, a backoff) | `sse.ts` |
 | The pairing code in the URL fragment, taken out of the address bar | `pair.ts` |
 | Back and Forward: each place is an entry of the tab's history, the state in `history.state`, not in the address | `nav.ts` |

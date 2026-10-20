@@ -2,6 +2,23 @@
 // app takes only what it uses; the styles are `appkit-ui/tokens.css` and `appkit-ui/base.css`.
 
 export {
+  cacheableClass,
+  indexedDbStore,
+  type CacheStore,
+  type DataClass,
+  type IndexedDbOptions,
+} from './cache';
+export {
+  ApiError,
+  etagOf,
+  failure,
+  HubClient,
+  PLAIN,
+  textOf,
+  type Hello,
+  type SnapshotResult,
+} from './client';
+export {
   ago,
   fill,
   formatNumber,
