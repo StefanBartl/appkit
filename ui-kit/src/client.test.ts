@@ -28,7 +28,7 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
   });
 }
 
-const client = (fetchFn: typeof fetch, base = '') => new HubClient(fetchFn, '/api/demo', base);
+const client = (fetchFn: typeof fetch, base = '') => new HubClient<{ n: number }>(fetchFn, '/api/demo', base);
 
 describe('the request', () => {
   it('sends the session as a bearer token, without cache, cookie or referrer', async () => {
@@ -131,7 +131,7 @@ describe('the snapshot', () => {
 
   it('gives the document and its tag, without the marks of a weak tag', async () => {
     const { fetchFn, sent } = recording([() => json({ n: 1 }, 200, { ETag: 'W/"x1"' })]);
-    const result = await client(fetchFn).snapshot<{ n: number }>(null);
+    const result = await client(fetchFn).snapshot(null);
     expect(result).toEqual({ kind: 'fresh', doc: { n: 1 }, etag: 'x1' });
     expect(sent[0]?.headers.has('If-None-Match')).toBe(false);
   });

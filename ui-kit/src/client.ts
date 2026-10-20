@@ -55,7 +55,8 @@ export function textOf(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-export class HubClient {
+/** @typeParam S the snapshot of the app (`Snapshot` of its contract). */
+export class HubClient<S = unknown> {
   private token: string | null = null;
   /** Called when the hub says the session is gone. */
   onUnauthorized: () => void = () => {};
@@ -163,7 +164,7 @@ export class HubClient {
   }
 
   /** The snapshot; with the tag of the one held, a 304 says it is still the current one. */
-  async snapshot<S>(etag: string | null): Promise<SnapshotResult<S>> {
+  async snapshot(etag: string | null): Promise<SnapshotResult<S>> {
     const headers: Record<string, string> = {};
     if (etag) headers['If-None-Match'] = `"${etag}"`;
     const response = await this.request(this.route('snapshot'), { headers });
