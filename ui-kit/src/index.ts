@@ -38,6 +38,18 @@ export {
   type MenuItem,
 } from './menu';
 export {
+  CONFLICT_CODES,
+  CONFLICTS_MAX,
+  DEFAULT_CONFLICT_MODE,
+  formatValue,
+  mergeConflicts,
+  parseConflictMode,
+  type ConflictAction,
+  type ConflictItem,
+  type ConflictMode,
+  type ConflictRow,
+} from './conflicts';
+export {
   ACTION_PREFIX,
   bumped,
   frecencyBonus,
