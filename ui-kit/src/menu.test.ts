@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ariaShortcut,
+  letterOfCode,
   menuForMnemonic,
   splitMnemonic,
   toBlocks,
@@ -63,6 +65,24 @@ describe('mnemonics', () => {
     expect(splitMnemonic('Project', 'P')).toEqual({ before: '', mark: 'P', after: 'roject' });
     expect(splitMnemonic('Project', 'z')).toEqual({ before: 'Project', mark: '', after: '' });
     expect(splitMnemonic('Project', undefined)).toEqual({ before: 'Project', mark: '', after: '' });
+  });
+  it('cuts the original label, also where lower-casing changes the length', () => {
+    // 'İ'.toLocaleLowerCase() is two code units: an index from the lower-cased text pointed one too far.
+    expect(splitMnemonic('İstatistik', 's')).toEqual({ before: 'İ', mark: 's', after: 'tatistik' });
+  });
+  it('names a physical key by its letter', () => {
+    expect(letterOfCode('KeyP')).toBe('p');
+    expect(letterOfCode('Digit1')).toBeUndefined();
+    expect(letterOfCode('')).toBeUndefined();
+  });
+});
+
+describe('ariaShortcut', () => {
+  it('writes the modifier keys as aria-keyshortcuts knows them', () => {
+    expect(ariaShortcut('Ctrl+N')).toBe('Control+N');
+    expect(ariaShortcut('Ctrl + Shift + S')).toBe('Control+Shift+S');
+    expect(ariaShortcut('Cmd+,')).toBe('Meta+,');
+    expect(ariaShortcut('F5')).toBe('F5');
   });
 });
 

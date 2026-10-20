@@ -11,6 +11,8 @@
 
   import { tick, untrack } from 'svelte';
   import {
+    ariaShortcut,
+    letterOfCode,
     menuForMnemonic,
     splitMnemonic,
     toBlocks,
@@ -31,7 +33,8 @@
     initialOpen?: string | null;
   } = $props();
 
-  const uid = Math.random().toString(36).slice(2, 9);
+  // Stable between the server and the client (Math.random would differ on hydration).
+  const uid = $props.id();
   let openId = $state<string | null>(untrack(() => initialOpen));
   let typed = '';
   let typedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -168,9 +171,20 @@
     }
   }
 
+  function modalOpen(): boolean {
+    try {
+      return document.querySelector('dialog:modal') !== null;
+    } catch {
+      return false; // a browser that does not know :modal
+    }
+  }
+
   function onWindowKey(event: KeyboardEvent): void {
-    if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-    const menu = menuForMnemonic(menus, event.key);
+    if (event.defaultPrevented || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    // A modal dialog makes the page behind it inert: its keys are not the bar's.
+    if (modalOpen()) return;
+    const menu =
+      menuForMnemonic(menus, event.key) ?? menuForMnemonic(menus, letterOfCode(event.code) ?? '');
     if (!menu) return;
     event.preventDefault();
     void open(menu.id, 'first');
@@ -198,7 +212,7 @@
         class="item"
         role={roleOf(item)}
         aria-checked={item.kind === 'radio' || item.kind === 'check' ? item.checked : undefined}
-        aria-keyshortcuts={item.shortcut}
+        aria-keyshortcuts={item.shortcut ? ariaShortcut(item.shortcut) : undefined}
         disabled={(item.kind === 'action' || item.kind === 'radio') && item.disabled}
         tabindex="-1"
         onclick={() => pick(item)}
@@ -208,7 +222,7 @@
           >{item.kind === 'radio' ? (item.checked ? '●' : '') : item.kind === 'check' ? (item.checked ? '✓' : '') : ''}</span
         >
         <span class="text">{item.label}</span>
-        {#if item.shortcut}<span class="shortcut" aria-hidden="true">{item.shortcut}</span>{/if}
+        {#if item.shortcut}<span class="shortcut">{item.shortcut}</span>{/if}
       </button>
     {/if}
   {/each}

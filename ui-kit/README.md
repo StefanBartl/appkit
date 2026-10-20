@@ -43,6 +43,10 @@ A menu is a list of items; `{ kind: 'section', label }` starts a group with a he
 shortcut is shown on the right and announced (`aria-keyshortcuts`); the app binds the key itself. A menu with
 `mnemonic: 'p'` opens on Alt+P and shows the letter underlined. Inside an open menu the arrow keys, Home and End walk
 the items, a letter goes to the next item that starts with it, Left and Right change the menu, Escape closes.
+Alt+letter is left alone while a modal dialog is open or when another handler took the key; on a Mac, where Option+letter
+writes another character, the physical key counts. Changed since the first version of the menu: `MenuItem` has a
+member more (`section`), so an exhaustive `switch` over `kind` needs a case for it, and a separator at the start or the
+end of a list, or two in a row, is no longer drawn.
 
 A hint is the text of the app, from its dictionary. Set it as `data-hint` (optionally `data-hint-title`, and
 `data-hint-delay` in milliseconds), or with the action, which sets exactly these:
@@ -53,7 +57,8 @@ A hint is the text of the app, from its dictionary. Set it as `data-hint` (optio
 ```
 
 The element must be reachable by keyboard (a button, a link, or `tabindex="0"`): the popup shows on hover after the
-pause and at once on focus, stays while the pointer is on it, and goes with Escape, on scrolling and when the pointer
+pause, at once on focus and at once on a tap (touch; a tap elsewhere takes it away). When the action updates the text
+the open popup follows, and when the element goes away the popup goes with it. It stays while the pointer is on it, and goes with Escape, on scrolling and when the pointer
 or the focus leaves.
 
 To work on the kit and an app at once, point the app at the checkout (`pnpm add link:../path/to/appkit/ui-kit`) and

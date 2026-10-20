@@ -53,18 +53,70 @@ export function menuForMnemonic(menus: readonly Menu[], key: string): Menu | und
   return menus.find((m) => m.mnemonic !== undefined && m.mnemonic.toLocaleLowerCase() === k);
 }
 
+/**
+ * The letter of a physical key ('KeyP' is 'p'), for a layout where Alt+letter writes another character (Option on a
+ * Mac): `event.key` is then that character, `event.code` still names the key.
+ */
+export function letterOfCode(code: string): string | undefined {
+  const m = /^Key([A-Z])$/.exec(code);
+  return m?.[1]?.toLowerCase();
+}
+
 /** A label cut at its mnemonic: the letter is marked, the rest stays. No mnemonic, or none in the label: no mark. */
 export function splitMnemonic(
   label: string,
   mnemonic: string | undefined,
 ): { before: string; mark: string; after: string } {
-  const at = mnemonic ? label.toLocaleLowerCase().indexOf(mnemonic.toLocaleLowerCase()) : -1;
+  // Found letter by letter in the label itself: lower-casing a whole label can change its length ('İ' becomes two
+  // code units), and an index from the changed text would cut the original in the wrong place.
+  let at = -1;
+  if (mnemonic) {
+    const want = mnemonic.toLocaleLowerCase();
+    for (let i = 0; i < label.length; ) {
+      const ch = String.fromCodePoint(label.codePointAt(i) ?? 0);
+      if (ch.toLocaleLowerCase() === want) {
+        at = i;
+        break;
+      }
+      i += ch.length;
+    }
+  }
   if (!mnemonic || at < 0) return { before: label, mark: '', after: '' };
   return {
     before: label.slice(0, at),
     mark: label.slice(at, at + mnemonic.length),
     after: label.slice(at + mnemonic.length),
   };
+}
+
+const KEY_NAMES: Record<string, string> = {
+  ctrl: 'Control',
+  control: 'Control',
+  cmd: 'Meta',
+  command: 'Meta',
+  '⌘': 'Meta',
+  meta: 'Meta',
+  win: 'Meta',
+  option: 'Alt',
+  opt: 'Alt',
+  alt: 'Alt',
+  shift: 'Shift',
+  esc: 'Escape',
+  del: 'Delete',
+};
+
+/**
+ * A shortcut as written for people ('Ctrl+Shift+N') in the form of `aria-keyshortcuts` ('Control+Shift+N'): the
+ * names of the modifier keys are the ones the specification knows; a single letter stays as it is.
+ */
+export function ariaShortcut(shortcut: string): string {
+  return shortcut
+    .split('+')
+    .map((part) => {
+      const p = part.trim();
+      return KEY_NAMES[p.toLocaleLowerCase()] ?? p;
+    })
+    .join('+');
 }
 
 /** How long a typed letter counts as part of the same word (milliseconds). */

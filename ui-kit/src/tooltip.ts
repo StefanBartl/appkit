@@ -63,6 +63,13 @@ export function hintAttributes(params: TooltipParams): Record<string, string> {
 
 const HINT_ATTRIBUTES = ['data-hint', 'data-hint-title', 'data-hint-delay'];
 
+// The action tells the popups that are installed when an element changed its hint or went away: a popup open for
+// it would otherwise show the old text, or stay on the screen for an element that is no longer there (no focusout
+// comes for a removed element).
+type Change = (el: HTMLElement, gone: boolean) => void;
+const watchers = new Set<Change>();
+const notify = (el: HTMLElement, gone: boolean): void => watchers.forEach((w) => w(el, gone));
+
 /**
  * Svelte action: `<button use:tooltip={t('save.hint')}>` or `use:tooltip={{ text, title, delay }}`. It only sets the
  * attributes the popup of `installTooltips` looks for, so the element must be reachable by keyboard (a button, a
@@ -75,9 +82,13 @@ export function tooltip(node: HTMLElement, params: TooltipParams): { update(next
   };
   apply(params);
   return {
-    update: apply,
+    update: (next) => {
+      apply(next);
+      notify(node, false);
+    },
     destroy: () => {
       for (const name of HINT_ATTRIBUTES) node.removeAttribute(name);
+      notify(node, true);
     },
   };
 }
@@ -229,6 +240,22 @@ export function installTooltips(
     if (el) show(el, true);
   };
   const onFocusOut = (): void => hide();
+  // A tap shows the popup at once: a touch screen has no hover to wait for, and not every browser focuses what is
+  // tapped (a button on iOS). A click with a mouse or the keyboard does not: hover and focus did it already.
+  const onClick = (e: Event): void => {
+    if ((e as PointerEvent).pointerType !== 'touch') return;
+    const el = hintOf(e.target);
+    if (el) {
+      cancelShow();
+      show(el, false);
+    } else hide();
+  };
+  const onChange: Change = (el, gone) => {
+    if (el !== current) return;
+    if (gone || (el.dataset.hint ?? '') === '') hide();
+    else show(el, viaFocus);
+  };
+  watchers.add(onChange);
   const onKey = (e: KeyboardEvent): void => {
     // The popup is closed by this Escape and by nothing else: it is not also the Escape of a dialog or a menu. A
     // modal dialog closes on Escape by its own default action (`cancel`), which `stopPropagation` does not stop.
@@ -251,9 +278,12 @@ export function installTooltips(
   doc.addEventListener('focusin', onFocusIn);
   doc.addEventListener('focusout', onFocusOut);
   doc.addEventListener('keydown', onKey);
+  doc.addEventListener('click', onClick);
   doc.addEventListener('scroll', onScroll, true);
   return () => {
     hide();
+    watchers.delete(onChange);
+    doc.removeEventListener('click', onClick);
     doc.removeEventListener('mouseover', onOver);
     doc.removeEventListener('mouseout', onOut);
     doc.removeEventListener('focusin', onFocusIn);

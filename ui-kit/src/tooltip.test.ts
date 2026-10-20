@@ -262,6 +262,36 @@ describe('the popup in a page', () => {
     expect(p.tip.textContent).toBe('B');
   });
 
+  it('shows at once on a tap, but not on a click of the mouse', () => {
+    const p = fakePage();
+    const b = p.button({ 'data-hint': 'Tapped' });
+    p.fire('click', b, { pointerType: 'mouse' });
+    expect(p.host.hidden).toBe(true);
+    p.fire('click', b, { pointerType: 'touch' });
+    expect(p.host.hidden).toBe(false);
+    expect(p.tip.textContent).toBe('Tapped');
+    // A tap elsewhere takes it away.
+    p.fire('click', p.button({}), { pointerType: 'touch' });
+    expect(p.host.hidden).toBe(true);
+  });
+
+  it('goes with the element when the action is destroyed, and follows a change of the text', () => {
+    const p = fakePage();
+    const b = p.button({});
+    const act = tooltip(b as unknown as HTMLElement, 'First');
+    p.fire('focusin', b);
+    expect(p.tip.textContent).toBe('First');
+    act.update('Second');
+    expect(p.tip.textContent).toBe('Second');
+    act.update('');
+    expect(p.host.hidden).toBe(true);
+    act.update('Third');
+    p.fire('focusin', b);
+    expect(p.host.hidden).toBe(false);
+    act.destroy();
+    expect(p.host.hidden).toBe(true);
+  });
+
   it('is taken away by the function it returned', () => {
     const p = fakePage();
     p.off();

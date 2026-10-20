@@ -3,6 +3,8 @@
 
 export { fill, pickLang } from './i18n';
 export {
+  ariaShortcut,
+  letterOfCode,
   menuForMnemonic,
   splitMnemonic,
   toBlocks,

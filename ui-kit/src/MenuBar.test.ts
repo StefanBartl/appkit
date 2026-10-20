@@ -41,7 +41,7 @@ describe('MenuBar', () => {
   });
   it('shows the shortcut on the right and names it for assistive technology', () => {
     const out = html({ initialOpen: 'project' });
-    expect(out).toContain('aria-keyshortcuts="Ctrl+N"');
+    expect(out).toContain('aria-keyshortcuts="Control+N"');
     expect(out).toMatch(/<span class="shortcut[^"]*"[^>]*>Ctrl\+N<\/span>/);
     // Only the item that has one shows it.
     expect(out.match(/class="shortcut/g)).toHaveLength(1);
