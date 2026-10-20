@@ -10,6 +10,7 @@
   // binds the key itself.
 
   import { tick, untrack } from 'svelte';
+  import { tooltip } from './tooltip';
   import {
     ariaShortcut,
     letterOfCode,
@@ -249,7 +250,7 @@
         class="mb-trigger"
         role="menuitem"
         data-for={menu.id}
-        data-hint={menu.hint}
+        use:tooltip={openId === menu.id ? '' : (menu.hint ?? '')}
         tabindex={stopId === menu.id ? 0 : -1}
         onfocus={() => (stop = menu.id)}
         aria-haspopup="menu"
