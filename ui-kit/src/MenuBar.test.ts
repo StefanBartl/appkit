@@ -46,6 +46,14 @@ describe('MenuBar', () => {
     // Only the item that has one shows it.
     expect(out.match(/class="shortcut/g)).toHaveLength(1);
   });
+  it('does not give a note the class of the info button (base.css draws that one as a pill)', () => {
+    const out = html({
+      initialOpen: 'p',
+      menus: [{ id: 'p', label: 'P', items: [{ kind: 'info', label: 'Last opened' }] }],
+    });
+    expect(out).toMatch(/class="note[ "]/);
+    expect(out).not.toMatch(/class="info[ "]/);
+  });
   it('opens no other menu than the one asked for', () => {
     const out = html({ initialOpen: 'view' });
     expect(out).toContain('Zoom');

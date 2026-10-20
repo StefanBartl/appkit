@@ -205,7 +205,7 @@
 {#snippet rows(items: MenuItem[], id: string)}
   {#each items as item, i (i)}
     {#if item.kind === 'info'}
-      <p class="info" role="none">{item.label}</p>
+      <p class="note" role="none">{item.label}</p>
     {:else if item.kind !== 'separator' && item.kind !== 'section'}
       <button
         type="button"
@@ -350,6 +350,11 @@
     background: var(--accent);
     color: var(--accent-text);
   }
+  /* The fill is the sign of the focus here (contrast of --accent-text on --accent): the ring of base.css on top of
+     it would be a second frame around the same thing. */
+  .item:focus-visible {
+    outline: none;
+  }
   .item:hover:not(:disabled) .mark,
   .item:focus-visible .mark {
     color: inherit;
@@ -384,7 +389,7 @@
     text-align: center;
     color: var(--accent);
   }
-  .info {
+  .note {
     margin: 0;
     padding: 0.3rem 0.5rem;
     color: var(--muted);
