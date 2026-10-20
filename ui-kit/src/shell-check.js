@@ -23,15 +23,10 @@ export const SHELL_PROPS = [
   'paddingTop',
   'paddingLeft',
   'outlineStyle',
-] as const;
-
-export type ShellProp = (typeof SHELL_PROPS)[number];
-export type ShellStyle = Record<ShellProp, string>;
-/** Probe name to what the browser works out for the first element that matches it. */
-export type ShellSignature = Record<string, ShellStyle>;
+];
 
 /** The parts every app has, by the selector that finds each. The ones of an open menu or palette exist only then. */
-export const SHELL_PROBES: Readonly<Record<string, string>> = {
+export const SHELL_PROBES = {
   page: 'body',
   menubar: '[role="menubar"]',
   trigger: '[role="menubar"] button.mb-trigger',
@@ -45,7 +40,7 @@ export const SHELL_PROBES: Readonly<Record<string, string>> = {
  * Runs in the page: the styles of the first element of each probe that is there now. Self-contained (it is sent to the
  * browser as text), so it names nothing of this file.
  */
-export function collectShell(probes: Record<string, string>): Record<string, Record<string, string>> {
+export function collectShell(probes) {
   const props = [
     'color',
     'backgroundColor',
@@ -62,12 +57,12 @@ export function collectShell(probes: Record<string, string>): Record<string, Rec
     'paddingLeft',
     'outlineStyle',
   ];
-  const out: Record<string, Record<string, string>> = {};
+  const out = {};
   for (const [name, selector] of Object.entries(probes)) {
     const el = document.querySelector(selector);
     if (!el) continue;
-    const css = getComputedStyle(el) as unknown as Record<string, string>;
-    const style: Record<string, string> = {};
+    const css = getComputedStyle(el);
+    const style = {};
     for (const prop of props) style[prop] = css[prop] ?? '';
     out[name] = style;
   }
@@ -75,8 +70,8 @@ export function collectShell(probes: Record<string, string>): Record<string, Rec
 }
 
 /** What is different: one line per probe and property, and one for a probe that the page does not have. */
-export function diffShell(label: string, actual: ShellSignature, golden: ShellSignature): string[] {
-  const lines: string[] = [];
+export function diffShell(label, actual, golden) {
+  const lines = [];
   for (const [name, want] of Object.entries(golden)) {
     const got = actual[name];
     if (!got) {
