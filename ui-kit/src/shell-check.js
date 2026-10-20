@@ -30,7 +30,8 @@ export const SHELL_PROBES = {
   page: 'body',
   menubar: '[role="menubar"]',
   trigger: '[role="menubar"] button.mb-trigger',
-  menuitem: '[role="menu"] button.mb-item',
+  // A plain action: not a checked or a disabled one, whose looks differ by design and would make the first item of a menu a moving target.
+  menuitem: '[role="menu"] button.mb-item:not(:disabled):not([aria-checked])',
   palette: 'dialog[open]:has(input[role="combobox"])',
   paletteInput: 'dialog[open] input[role="combobox"]',
   paletteOption: 'dialog[open] [role="option"][aria-selected="true"]',

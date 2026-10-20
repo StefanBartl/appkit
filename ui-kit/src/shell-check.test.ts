@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { collectShell, diffShell, SHELL_PROPS, type ShellSignature, type ShellStyle } from './shell-check';
+import { collectShell, diffShell, SHELL_PROBES, SHELL_PROPS, type ShellSignature, type ShellStyle } from './shell-check';
 
 const style = (over: Partial<ShellStyle> = {}): ShellStyle => {
   const base = Object.fromEntries(SHELL_PROPS.map((p) => [p, 'x'])) as ShellStyle;
@@ -40,5 +40,17 @@ describe('collectShell', () => {
     const sent = new Function(`return (${collectShell.toString()})`)() as typeof collectShell;
     document.body.innerHTML = '<nav role="menubar" style="color: rgb(9, 9, 9)"></nav>';
     expect(sent({ menubar: '[role="menubar"]' })['menubar']?.['color']).toBe('rgb(9, 9, 9)');
+  });
+});
+
+describe('the probe of a menu item', () => {
+  it('is a plain action: a disabled one and a checked one are not the one that is read', () => {
+    document.body.innerHTML = `<div role="menu">
+      <button class="mb-item" disabled style="color: rgb(1, 1, 1)"></button>
+      <button class="mb-item" role="menuitemradio" aria-checked="true" style="color: rgb(2, 2, 2)"></button>
+      <button class="mb-item" role="menuitemcheckbox" aria-checked="false" style="color: rgb(3, 3, 3)"></button>
+      <button class="mb-item" role="menuitem" style="color: rgb(4, 4, 4)"></button>
+    </div>`;
+    expect(collectShell(SHELL_PROBES)['menuitem']?.['color']).toBe('rgb(4, 4, 4)');
   });
 });
