@@ -48,7 +48,7 @@ const key = (target: EventTarget, k: string, init: KeyboardEventInit = {}): Keyb
 };
 const popup = (id: string) => document.querySelector(`[data-menu="${id}"]`);
 const active = () => (document.activeElement as HTMLElement | null)?.textContent?.trim();
-const trigger = (id: string) => document.querySelector<HTMLButtonElement>(`button.trigger[data-for="${id}"]`)!;
+const trigger = (id: string) => document.querySelector<HTMLButtonElement>(`button.mb-trigger[data-for="${id}"]`)!;
 
 describe('MenuBar keys', () => {
   it('opens the menu of an Alt+letter and puts the focus on its first item', async () => {

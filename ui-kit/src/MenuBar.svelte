@@ -48,12 +48,12 @@
     item.kind === 'radio' ? 'menuitemradio' : item.kind === 'check' ? 'menuitemcheckbox' : 'menuitem';
 
   function triggers(): HTMLButtonElement[] {
-    return root ? [...root.querySelectorAll<HTMLButtonElement>('button.trigger')] : [];
+    return root ? [...root.querySelectorAll<HTMLButtonElement>('button.mb-trigger')] : [];
   }
 
   function itemButtons(id: string): HTMLButtonElement[] {
     return root
-      ? [...root.querySelectorAll<HTMLButtonElement>(`[data-menu="${id}"] button.item:not(:disabled)`)]
+      ? [...root.querySelectorAll<HTMLButtonElement>(`[data-menu="${id}"] button.mb-item:not(:disabled)`)]
       : [];
   }
 
@@ -164,7 +164,7 @@
           clearTimeout(typedTimer);
           typed += event.key;
           typedTimer = setTimeout(() => (typed = ''), TYPE_AHEAD_MS);
-          const labels = items.map((b) => b.querySelector('.text')?.textContent?.trim() ?? '');
+          const labels = items.map((b) => b.querySelector('.mb-text')?.textContent?.trim() ?? '');
           const to = typeAheadIndex(labels, at, typed);
           if (to >= 0) items[to]?.focus();
         }
@@ -205,11 +205,11 @@
 {#snippet rows(items: MenuItem[], id: string)}
   {#each items as item, i (i)}
     {#if item.kind === 'info'}
-      <p class="note" role="none">{item.label}</p>
+      <p class="mb-note" role="none">{item.label}</p>
     {:else if item.kind !== 'separator' && item.kind !== 'section'}
       <button
         type="button"
-        class="item"
+        class="mb-item"
         role={roleOf(item)}
         aria-checked={item.kind === 'radio' || item.kind === 'check' ? item.checked : undefined}
         aria-keyshortcuts={item.shortcut ? ariaShortcut(item.shortcut) : undefined}
@@ -218,11 +218,11 @@
         onclick={() => pick(item)}
         onkeydown={(e) => onItemKey(e, id)}
       >
-        <span class="mark" aria-hidden="true"
+        <span class="mb-mark" aria-hidden="true"
           >{item.kind === 'radio' ? (item.checked ? '●' : '') : item.kind === 'check' ? (item.checked ? '✓' : '') : ''}</span
         >
-        <span class="text">{item.label}</span>
-        {#if item.shortcut}<span class="shortcut">{item.shortcut}</span>{/if}
+        <span class="mb-text">{item.label}</span>
+        {#if item.shortcut}<span class="mb-shortcut">{item.shortcut}</span>{/if}
       </button>
     {/if}
   {/each}
@@ -232,7 +232,7 @@
 
 <!-- Focus that leaves the bar (Tab) closes the menu: it must not stay open behind. -->
 <div
-  class="menubar"
+  class="mb-menubar"
   role="menubar"
   tabindex="-1"
   aria-label={label}
@@ -243,10 +243,10 @@
   }}
 >
   {#each menus as menu (menu.id)}
-    <div class="menu">
+    <div class="mb-menu">
       <button
         type="button"
-        class="trigger"
+        class="mb-trigger"
         role="menuitem"
         data-for={menu.id}
         tabindex={stopId === menu.id ? 0 : -1}
@@ -261,13 +261,13 @@
         }}>{@render triggerText(menu)}</button
       >
       {#if openId === menu.id}
-        <div class="popup" role="menu" aria-label={menu.label} data-menu={menu.id}>
+        <div class="mb-popup" role="menu" aria-label={menu.label} data-menu={menu.id}>
           {#each toBlocks(menu.items) as block, b (b)}
             {#if block.kind === 'divider'}
               <hr />
             {:else if block.heading !== null}
               <div role="group" aria-labelledby="{uid}-{menu.id}-{b}">
-                <p class="section" id="{uid}-{menu.id}-{b}" role="presentation">{block.heading}</p>
+                <p class="mb-section" id="{uid}-{menu.id}-{b}" role="presentation">{block.heading}</p>
                 {@render rows(block.items, menu.id)}
               </div>
             {:else}
@@ -281,22 +281,22 @@
 </div>
 
 <style>
-  .menubar {
+  .mb-menubar {
     display: flex;
     flex-wrap: wrap;
     gap: 0.1rem;
   }
-  .trigger {
+  .mb-trigger {
     white-space: nowrap;
   }
-  .trigger u {
+  .mb-trigger u {
     text-decoration: underline;
     text-underline-offset: 0.15em;
   }
-  .menu {
+  .mb-menu {
     position: relative;
   }
-  .trigger {
+  .mb-trigger {
     background: none;
     border: 1px solid transparent;
     border-radius: var(--radius);
@@ -304,12 +304,12 @@
     cursor: pointer;
     color: var(--text);
   }
-  .trigger:hover,
-  .trigger[aria-expanded='true'] {
+  .mb-trigger:hover,
+  .mb-trigger[aria-expanded='true'] {
     background: var(--surface-2);
     border-color: var(--line);
   }
-  .popup {
+  .mb-popup {
     position: absolute;
     z-index: 20;
     top: calc(100% + 0.2rem);
@@ -326,11 +326,11 @@
     overflow-y: auto;
   }
   /* The last menu sits near the right edge in a narrow window: its popup opens to the left. */
-  .menu:last-child .popup {
+  .mb-menu:last-child .mb-popup {
     left: auto;
     right: 0;
   }
-  .item {
+  .mb-item {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -345,33 +345,35 @@
     white-space: nowrap;
   }
   /* As in a native menu, the item under the pointer or the key is filled with the accent. */
-  .item:hover:not(:disabled),
-  .item:focus-visible {
+  .mb-item:hover:not(:disabled),
+  .mb-item:focus-visible {
     background: var(--accent);
     color: var(--accent-text);
   }
   /* The fill is the sign of the focus here (contrast of --accent-text on --accent): the ring of base.css on top of
-     it would be a second frame around the same thing. */
-  .item:focus-visible {
-    outline: none;
+     it would be a second frame around the same thing. The outline stays as a transparent one: in forced colours
+     (Windows High Contrast) the fill is replaced, and a transparent outline is drawn there in a system colour. */
+  .mb-item:focus-visible {
+    outline: 2px solid transparent;
+    outline-offset: -2px;
   }
-  .item:hover:not(:disabled) .mark,
-  .item:focus-visible .mark {
+  .mb-item:hover:not(:disabled) .mb-mark,
+  .mb-item:focus-visible .mb-mark {
     color: inherit;
   }
-  .text {
+  .mb-text {
     flex: 1;
   }
-  .shortcut {
+  .mb-shortcut {
     margin-left: 1.5rem;
     color: var(--muted);
     font-size: 0.85rem;
   }
-  .item:hover:not(:disabled) .shortcut,
-  .item:focus-visible .shortcut {
+  .mb-item:hover:not(:disabled) .mb-shortcut,
+  .mb-item:focus-visible .mb-shortcut {
     color: inherit;
   }
-  .section {
+  .mb-section {
     margin: 0;
     padding: 0.35rem 0.5rem 0.15rem;
     color: var(--muted);
@@ -380,16 +382,16 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
-  .item:disabled {
+  .mb-item:disabled {
     color: var(--muted);
     cursor: default;
   }
-  .mark {
+  .mb-mark {
     width: 1rem;
     text-align: center;
     color: var(--accent);
   }
-  .note {
+  .mb-note {
     margin: 0;
     padding: 0.3rem 0.5rem;
     color: var(--muted);
