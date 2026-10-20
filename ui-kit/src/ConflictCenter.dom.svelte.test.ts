@@ -178,6 +178,37 @@ describe('ConflictCenter', () => {
     expect(closed).toBe(1);
   });
 
+  it('shows two notes with the same words, both', async () => {
+    state.items = [item('a', { notes: ['Same.', 'Same.'] })];
+    build();
+    expect([...document.querySelectorAll('.note')].map((n) => n.textContent)).toEqual(['Same.', 'Same.']);
+  });
+
+  it('closes with the close handler the app has when Escape comes, not the one it had at the start', async () => {
+    const calls: string[] = [];
+    const props = $state({ onclose: () => void calls.push('first') });
+    // The getter is kept (a spread would copy its value once).
+    app = mount(ConflictCenter, {
+      target: document.body,
+      props: {
+        open: true,
+        items: [item('a')],
+        mode: 'list',
+        onmode: () => undefined,
+        onaction: () => undefined,
+        get onclose() {
+          return props.onclose;
+        },
+        labels,
+      },
+    });
+    flushSync();
+    props.onclose = () => void calls.push('second');
+    flushSync();
+    document.querySelector('dialog')!.dispatchEvent(new Event('cancel', { cancelable: true }));
+    expect(calls).toEqual(['second']);
+  });
+
   it('is shut while the app says so', async () => {
     state.open = false;
     build();

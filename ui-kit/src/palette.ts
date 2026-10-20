@@ -110,6 +110,8 @@ export function parseFrecency(text: string | null, prefixes?: readonly string[])
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return {};
     const out: Frecency = {};
     for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      // `__proto__` from JSON is an own key, and assigning it would make its value the prototype of the result.
+      if (key === '__proto__') continue;
       if (prefixes && !prefixes.some((p) => key.startsWith(p))) continue;
       const entry = value as { n?: unknown; last?: unknown } | null;
       if (entry && typeof entry.n === 'number' && typeof entry.last === 'number' && entry.n > 0) {

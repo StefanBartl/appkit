@@ -85,6 +85,13 @@ describe('frecency', () => {
     });
   });
 
+  it('does not let a __proto__ key of the profile become the prototype of every entry', () => {
+    const read = parseFrecency('{"__proto__":{"n":9,"last":1},"action:a":{"n":1,"last":5}}');
+    expect(Object.keys(read)).toEqual(['action:a']);
+    expect(Object.getPrototypeOf(read)).toBe(Object.prototype);
+    expect(read['action:other']).toBeUndefined();
+  });
+
   it('keeps only the prefixes a page asks for, so an id it never remembers does not come back', () => {
     const text = JSON.stringify({ 'action:a': { n: 1, last: 5 }, 'rule:x': { n: 1, last: 5 } });
     expect(parseFrecency(text, ['action:'])).toEqual({ 'action:a': { n: 1, last: 5 } });

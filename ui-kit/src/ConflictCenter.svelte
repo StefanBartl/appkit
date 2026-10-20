@@ -30,7 +30,7 @@
     onaction,
     ondiscardall,
     onclose,
-    oncancel = onclose,
+    oncancel,
     labels,
     show = markHidden,
   }: {
@@ -42,7 +42,7 @@
     /** Without it there is no button for letting all go. */
     ondiscardall?: () => void;
     onclose: () => void;
-    /** Escape. The app may make it a choice (rules-desktop drops the conflict); the default closes. */
+    /** Escape. The app may make it a choice (rules-desktop drops the conflict, or does nothing); the default closes. */
     oncancel?: () => void;
     labels: Labels;
     show?: (text: string) => string;
@@ -64,7 +64,8 @@
   aria-labelledby="conflicts-title"
   oncancel={(event) => {
     event.preventDefault();
-    oncancel();
+    // Read when the key is pressed, so that a handler the app changed meanwhile is the one that runs.
+    (oncancel ?? onclose)();
   }}
   onclose={() => {
     if (!dialog?.open) onclose();
@@ -82,7 +83,7 @@
       <li>
         <p class="what">{show(item.title)}</p>
         {#if item.id}<p class="id"><code>{show(item.id)}</code></p>{/if}
-        {#each item.notes as note (note)}<p class="note">{note}</p>{/each}
+        {#each item.notes as note, i (i)}<p class="note">{note}</p>{/each}
         {#if item.rows.length > 0}
           <table>
             <thead>
