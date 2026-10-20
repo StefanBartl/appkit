@@ -12,6 +12,8 @@
     "./tokens.css": "./src/tokens.css",
     "./base.css": "./src/base.css",
     "./i18n": "./src/i18n.ts",
+    "./keymap": "./src/keymap.ts",
+    "./keymap.json": "./src/keymap.json",
     "./markdown": "./src/markdown.ts",
     "./menu": "./src/menu.ts",
     "./nav": "./src/nav.ts",

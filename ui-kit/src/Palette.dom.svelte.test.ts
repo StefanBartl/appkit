@@ -133,7 +133,7 @@ describe('Palette', () => {
       target: document.body,
       props: {
         open: true,
-        items: () => paletteItems('', [{ key: 'x', label: 'a‮b', run: () => undefined }], [], {}, NOW),
+        items: () => paletteItems('', [{ key: 'x', label: `a${String.fromCharCode(0x202e)}b`, run: () => undefined }], [], {}, NOW),
         onchoose: () => undefined,
         onclose: () => undefined,
         labels,

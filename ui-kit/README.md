@@ -18,7 +18,8 @@ bundler (Vite with the Svelte plugin) compiles them, there is no build here.
 | The pairing code in the URL fragment, taken out of the address bar | `pair.ts` |
 | Back and Forward: each place is an entry of the tab's history, the state in `history.state`, not in the address | `nav.ts` |
 | Characters that hide or reverse text, made visible | `text.ts` |
-| Filling the holes of a text and choosing a language; the words belong to the app | `i18n.ts` |
+| The keyboard as data: `keymap.json` says which key is which command (Ctrl or Cmd and K for the palette, `j`/`k`, Enter, Escape, `/`, a chord that starts with `g`); `resolveKey` turns a key press into a command by name, without a DOM. An app adds the targets of its chord with `withChord` and acts on the command | `keymap.json`, `keymap.ts` |
+| Filling the holes of a text, choosing a language, looking a key up, `ago`, `formatNumber`, `labelOf`/`hintOf` (the word and the explanation of a value, a new value shows as itself); the words belong to the app, except `kitTexts`, those of the kit's own components under the prefix `kit.` | `i18n.ts` |
 
 ## Using it
 
@@ -37,7 +38,7 @@ import MenuBar, { type Menu } from 'appkit-ui/MenuBar.svelte';
 import { installTooltips, tooltip } from 'appkit-ui/tooltip';
 ```
 
-The kit has no words: `installTooltips` takes the name of its region from the app (`regionLabel`), the components
+The kit has almost no words: `installTooltips` takes the name of its region from the app (`regionLabel`), the components
 take every label as a prop, and `i18n.ts` only fills holes and picks a language.
 
 A menu is a list of items; `{ kind: 'section', label }` starts a group with a heading (a line is drawn before it),

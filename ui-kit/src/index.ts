@@ -1,7 +1,30 @@
 // The kit as one module. The Svelte components are imported by their file (`appkit-ui/MenuBar.svelte`), so that an
 // app takes only what it uses; the styles are `appkit-ui/tokens.css` and `appkit-ui/base.css`.
 
-export { fill, pickLang } from './i18n';
+export {
+  ago,
+  fill,
+  formatNumber,
+  hintOf,
+  kitTexts,
+  labelOf,
+  lookup,
+  pickLang,
+  type AgoKey,
+  type Dictionary,
+  type KitKey,
+} from './i18n';
+export {
+  defaultKeymap,
+  matches,
+  resolveKey,
+  withChord,
+  type ChordState,
+  type Command,
+  type KeyPress,
+  type KeyResult,
+  type Keymap,
+} from './keymap';
 export {
   ariaShortcut,
   letterOfCode,

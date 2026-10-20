@@ -1,0 +1,12 @@
+{
+  "palette": "Mod+K",
+  "chord": { "prefix": "g", "timeoutMs": 1500, "targets": {} },
+  "keys": {
+    "Enter": "open",
+    "Escape": "escape",
+    "/": "search",
+    "j": "next",
+    "k": "previous"
+  },
+  "always": ["Enter", "Escape"]
+}
