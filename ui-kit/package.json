@@ -22,6 +22,8 @@
     "./nav": "./src/nav.ts",
     "./palette": "./src/palette.ts",
     "./pair": "./src/pair.ts",
+    "./shell-check": "./src/shell-check.ts",
+    "./shell.golden.json": "./src/shell.golden.json",
     "./sse": "./src/sse.ts",
     "./text": "./src/text.ts",
     "./toast": "./src/toast.ts",
