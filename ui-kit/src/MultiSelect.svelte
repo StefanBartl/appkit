@@ -1,6 +1,7 @@
 <script lang="ts">
   // A choice of any number of values. The name of the choice is the label of
   // the button, never one of the options.
+  import { tooltip } from './tooltip';
 
   export interface Option {
     value: string;
@@ -18,6 +19,7 @@
     onchange,
     resetLabel,
     searchLabel,
+    hint = '',
   }: {
     label: string;
     options: readonly Option[];
@@ -25,6 +27,8 @@
     onchange: (next: string[]) => void;
     resetLabel: string;
     searchLabel: string;
+    /** What the choice is for: the hint popup shows it on the button (not while the choice is open). */
+    hint?: string;
   } = $props();
 
   let open = $state(false);
@@ -104,6 +108,7 @@
     class:active={selected.length > 0}
     aria-haspopup="true"
     aria-expanded={open}
+    use:tooltip={open ? '' : hint}
     onclick={() => (open ? close(false) : (open = true))}
   >
     <span>{summary}</span>
