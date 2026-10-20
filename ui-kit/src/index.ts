@@ -14,6 +14,24 @@ export {
   type MenuBlock,
   type MenuItem,
 } from './menu';
+export {
+  ACTION_PREFIX,
+  bumped,
+  frecencyBonus,
+  FRECENCY_MAX,
+  matchScore,
+  PALETTE_LIMIT,
+  paletteItems,
+  parseFrecency,
+  stepIndex,
+  wordScore,
+  type Frecency,
+  type PaletteAction,
+  type PaletteEntry,
+  type PaletteItem,
+  type PaletteOptions,
+} from './palette';
+export type { ToastKind, ToastMessage } from './toast';
 export { hostOf, MAX_SOURCE, parseMarkdown, safeHref, type Block, type Inline } from './markdown';
 export { installNav, type Nav, type NavHistory, type NavOptions, type NavWindow } from './nav';
 export { takePairingCode, type HistoryLike, type LocationLike } from './pair';
