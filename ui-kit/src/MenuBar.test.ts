@@ -64,6 +64,12 @@ describe('MenuBar', () => {
     const rule = /\}\s*\.mb-item:focus-visible\s*\{([^}]*)\}/.exec(source.replace(/\/\*[\s\S]*?\*\//g, ''));
     expect(rule?.[1]).toMatch(/outline:\s*2px solid transparent/);
   });
+  it('gives the trigger of a menu its hint for the popup, and none where the menu has none', () => {
+    const out = html({ menus: [{ ...menus[0]!, hint: 'Everything about the project' }, menus[1]!] });
+    expect(out).toContain('data-hint="Everything about the project"');
+    expect(out.match(/data-hint=/g)).toHaveLength(1);
+  });
+
   it('opens no other menu than the one asked for', () => {
     const out = html({ initialOpen: 'view' });
     expect(out).toContain('Zoom');

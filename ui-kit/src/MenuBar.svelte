@@ -249,6 +249,7 @@
         class="mb-trigger"
         role="menuitem"
         data-for={menu.id}
+        data-hint={menu.hint}
         tabindex={stopId === menu.id ? 0 : -1}
         onfocus={() => (stop = menu.id)}
         aria-haspopup="menu"

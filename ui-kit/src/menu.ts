@@ -14,6 +14,8 @@ export interface Menu {
   label: string;
   /** One letter of the label: Alt+letter opens the menu, and the letter is underlined in the bar. */
   mnemonic?: string;
+  /** What the menu is for: shown by the hint popup (`tooltip.ts`) on hover and focus of the menu in the bar. */
+  hint?: string;
   items: MenuItem[];
 }
 
