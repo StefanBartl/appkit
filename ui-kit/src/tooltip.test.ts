@@ -228,6 +228,35 @@ describe('the popup in a page', () => {
     expect(p.host.hidden).toBe(true);
   });
 
+  it('shows no popup for the focus a press of the mouse causes, and none for a press after a warm popup; the keyboard still does', () => {
+    const p = fakePage();
+    const a = p.button({ 'data-hint': 'First' });
+    const b = p.button({ 'data-hint': 'Second' });
+    // The first is warm (the pointer rested on it), then the mouse is pressed on the second: its focus shows nothing.
+    p.fire('mouseover', a);
+    vi.advanceTimersByTime(SHOW_DELAY_MS);
+    expect(p.host.hidden).toBe(false);
+    p.fire('mousedown', b);
+    p.fire('focusout', a);
+    p.fire('focusin', b);
+    expect(p.host.hidden).toBe(true);
+    p.fire('mouseup', b);
+    // Once the button is up the focus of the keyboard shows at once.
+    p.fire('focusout', b);
+    p.fire('focusin', a);
+    expect(p.host.hidden).toBe(false);
+    expect(p.tip.textContent).toBe('First');
+  });
+
+  it('takes a press that was never released for the keyboard again at the next key', () => {
+    const p = fakePage();
+    const a = p.button({ 'data-hint': 'First' });
+    p.fire('mousedown', a);
+    p.fire('keydown', a, { key: 'Tab' });
+    p.fire('focusin', a);
+    expect(p.host.hidden).toBe(false);
+  });
+
   it('goes with Escape (and only then takes the key), and leaves Escape alone when it is not open', () => {
     const p = fakePage();
     const b = p.button({ 'data-hint': 'Esc me' });

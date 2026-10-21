@@ -132,6 +132,8 @@ export function installTooltips(
   let current: HTMLElement | null = null;
   let describedBefore: string | null = null;
   let viaFocus = false;
+  // The button of the mouse is down: the focus that comes with it is the press, not the keyboard.
+  let pressing = false;
   let showTimer: number | undefined;
   let hideTimer: number | undefined;
 
@@ -235,7 +237,17 @@ export function installTooltips(
       scheduleHide();
     }
   };
+  // A press of the mouse focuses what it hits, and the browser may scroll it into view while it does: a popup shown by that
+  // focus would be placed for the element before the scroll and lie under the pointer, where it catches the click. A press
+  // shows no popup; the pointer resting on the element does (hover), and the keyboard focus does at once.
+  const onDown = (): void => {
+    pressing = true;
+  };
+  const onUp = (): void => {
+    pressing = false;
+  };
   const onFocusIn = (e: Event): void => {
+    if (pressing) return;
     const el = hintOf(e.target);
     if (el) show(el, true);
   };
@@ -257,6 +269,8 @@ export function installTooltips(
   };
   watchers.add(onChange);
   const onKey = (e: KeyboardEvent): void => {
+    // A key after a press that never got its release (the button was let go outside the window) is the keyboard again.
+    pressing = false;
     // The popup is closed by this Escape and by nothing else: it is not also the Escape of a dialog or a menu. A
     // modal dialog closes on Escape by its own default action (`cancel`), which `stopPropagation` does not stop.
     if (e.key === 'Escape' && !tip.hidden) {
@@ -275,6 +289,8 @@ export function installTooltips(
 
   doc.addEventListener('mouseover', onOver);
   doc.addEventListener('mouseout', onOut);
+  doc.addEventListener('mousedown', onDown, true);
+  doc.addEventListener('mouseup', onUp, true);
   doc.addEventListener('focusin', onFocusIn);
   doc.addEventListener('focusout', onFocusOut);
   doc.addEventListener('keydown', onKey);
@@ -286,6 +302,8 @@ export function installTooltips(
     doc.removeEventListener('click', onClick);
     doc.removeEventListener('mouseover', onOver);
     doc.removeEventListener('mouseout', onOut);
+    doc.removeEventListener('mousedown', onDown, true);
+    doc.removeEventListener('mouseup', onUp, true);
     doc.removeEventListener('focusin', onFocusIn);
     doc.removeEventListener('focusout', onFocusOut);
     doc.removeEventListener('keydown', onKey);
