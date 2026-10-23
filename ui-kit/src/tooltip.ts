@@ -16,20 +16,45 @@ export interface Box {
 }
 
 /**
- * Where the popup goes: below the element, above it when there is no room below, and kept inside the window.
+ * Where the popup goes: below the element, else above it, else to its right or left - the first place that fits in
+ * the window and that `free` says covers no other control (a popup that stays while the pointer is on it would catch
+ * the click meant for the control under it). When no place is free it goes below (above when there is no room below),
+ * kept inside the window; a press on it then takes it away.
  */
 export function placeTip(
   anchor: Box,
   tip: { width: number; height: number },
   view: { width: number; height: number },
   gap = 6,
+  free: (box: Box) => boolean = () => true,
 ): { x: number; y: number } {
-  let y = anchor.y + anchor.height + gap;
-  if (y + tip.height > view.height && anchor.y - gap - tip.height >= 0) y = anchor.y - gap - tip.height;
-  y = Math.max(0, Math.min(y, Math.max(0, view.height - tip.height)));
-  const x = Math.max(0, Math.min(anchor.x, Math.max(0, view.width - tip.width)));
-  return { x, y };
+  const clampX = (x: number) => Math.max(0, Math.min(x, Math.max(0, view.width - tip.width)));
+  const clampY = (y: number) => Math.max(0, Math.min(y, Math.max(0, view.height - tip.height)));
+  const below = { x: clampX(anchor.x), y: anchor.y + anchor.height + gap };
+  const above = { x: clampX(anchor.x), y: anchor.y - gap - tip.height };
+  const right = { x: anchor.x + anchor.width + gap, y: clampY(anchor.y) };
+  const left = { x: anchor.x - gap - tip.width, y: clampY(anchor.y) };
+  const fits = (p: { x: number; y: number }) =>
+    p.x >= 0 && p.y >= 0 && p.x + tip.width <= view.width && p.y + tip.height <= view.height;
+  for (const p of [below, above, right, left]) {
+    if (fits(p) && free({ ...p, width: tip.width, height: tip.height })) return p;
+  }
+  const y = below.y + tip.height > view.height && above.y >= 0 ? above.y : below.y;
+  return { x: below.x, y: clampY(y) };
 }
+
+/** What a press can mean: the popup must not lie on one of these (of another element). */
+const CONTROL =
+  'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"]), [role="button"], ' +
+  '[role="menuitem"], [role="menuitemradio"], [role="checkbox"], [role="option"], [role="tab"]';
+
+/**
+ * Where in a box it is looked whether a control is under it: a few points, not every pixel, near the edges as well (a
+ * control that reaches a few pixels into the box catches the pointer there too).
+ */
+const PROBES: readonly (readonly [number, number])[] = [0.05, 0.5, 0.95].flatMap((fy) =>
+  [0.05, 0.5, 0.95].map((fx) => [fx, fy] as const),
+);
 
 /** The pause before a popup shows on hover, and the one before it goes when the pointer left. */
 export const SHOW_DELAY_MS = 300;
@@ -174,6 +199,22 @@ export function installTooltips(
     if (host.parentElement !== doc.body) doc.body.appendChild(host);
   }
 
+  /** No control of another element under `box` (the topmost thing at a few of its points that is not the popup). */
+  function freeFor(el: HTMLElement): (box: Box) => boolean {
+    return (box) => {
+      // A document without hit testing (a test without layout) has nothing to say.
+      if (typeof doc.elementsFromPoint !== 'function') return true;
+      for (const [fx, fy] of PROBES) {
+        const hit = doc
+          .elementsFromPoint(box.x + box.width * fx, box.y + box.height * fy)
+          .find((e) => !host.contains(e));
+        const control = hit?.closest(CONTROL);
+        if (control && control !== el && !control.contains(el) && !el.contains(control)) return false;
+      }
+      return true;
+    };
+  }
+
   function place(el: HTMLElement): void {
     const anchor = el.getBoundingClientRect();
     const size = tip.getBoundingClientRect();
@@ -181,6 +222,8 @@ export function installTooltips(
       { x: anchor.x, y: anchor.y, width: anchor.width, height: anchor.height },
       { width: size.width, height: size.height },
       { width: win.innerWidth, height: win.innerHeight },
+      6,
+      freeFor(el),
     );
     tip.style.left = `${at.x}px`;
     tip.style.top = `${at.y}px`;
@@ -240,8 +283,11 @@ export function installTooltips(
   // A press of the mouse focuses what it hits, and the browser may scroll it into view while it does: a popup shown by that
   // focus would be placed for the element before the scroll and lie under the pointer, where it catches the click. A press
   // shows no popup; the pointer resting on the element does (hover), and the keyboard focus does at once.
-  const onDown = (): void => {
+  // A press on the popup itself takes it away at once: it covers what the person meant to press (when it found no free
+  // place). That press is lost, the next one reaches the control.
+  const onDown = (e: Event): void => {
     pressing = true;
+    if (!tip.hidden && e.target instanceof win.Node && tip.contains(e.target)) hide();
   };
   const onUp = (): void => {
     pressing = false;

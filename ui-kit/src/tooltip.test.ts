@@ -38,6 +38,28 @@ describe('placeTip', () => {
   });
 });
 
+describe('placeTip and the controls under it', () => {
+  const anchor = { x: 300, y: 100, width: 50, height: 20 };
+  const tip = { width: 200, height: 40 };
+  // Taken places, as boxes: what the probe of the page would find a control of another element under.
+  const takenBy = (...boxes: { x: number; y: number; width: number; height: number }[]) => (b: { x: number; y: number; width: number; height: number }) =>
+    !boxes.some((o) => b.x < o.x + o.width && o.x < b.x + b.width && b.y < o.y + o.height && o.y < b.y + b.height);
+  const belowBox = { x: 300, y: 126, width: 200, height: 40 };
+  it('goes above when a control lies below', () => {
+    expect(placeTip(anchor, tip, view, 6, takenBy(belowBox))).toEqual({ x: 300, y: 100 - 6 - 40 });
+  });
+  it('goes to the right, then to the left, when below and above are taken', () => {
+    const notAt = (...spots: { x: number; y: number }[]) => (b: { x: number; y: number }) => !spots.some((p) => p.x === b.x && p.y === b.y);
+    const below = { x: 300, y: 126 };
+    const above = { x: 300, y: 54 };
+    expect(placeTip(anchor, tip, view, 6, notAt(below, above))).toEqual({ x: 356, y: 100 });
+    expect(placeTip(anchor, tip, view, 6, notAt(below, above, { x: 356, y: 100 }))).toEqual({ x: 94, y: 100 });
+  });
+  it('stays below when no place is free (a press on it takes it away then)', () => {
+    expect(placeTip(anchor, tip, view, 6, () => false)).toEqual({ x: 300, y: 126 });
+  });
+});
+
 describe('aria-describedby tokens', () => {
   it('adds the popup once and takes only it away', () => {
     expect(withToken(null, 'tip')).toBe('tip');
@@ -246,6 +268,17 @@ describe('the popup in a page', () => {
     p.fire('focusin', a);
     expect(p.host.hidden).toBe(false);
     expect(p.tip.textContent).toBe('First');
+  });
+
+  it('goes at once when the popup itself is pressed (it lay on what the person meant to press)', () => {
+    const p = fakePage();
+    const a = p.button({ 'data-hint': 'First' });
+    p.fire('mouseover', a);
+    vi.advanceTimersByTime(SHOW_DELAY_MS);
+    expect(p.host.hidden).toBe(false);
+    p.fire('mouseover', p.tip);
+    p.fire('mousedown', p.tip);
+    expect(p.host.hidden).toBe(true);
   });
 
   it('takes a press that was never released for the keyboard again at the next key', () => {
