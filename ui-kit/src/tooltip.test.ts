@@ -5,6 +5,8 @@ import {
   HIDE_DELAY_MS,
   installTooltips,
   MAX_DELAY_MS,
+  liesOnControl,
+  ownControl,
   placeTip,
   SHOW_DELAY_MS,
   tooltip,
@@ -22,7 +24,7 @@ export function needsALabel(doc: Document, win: Window & typeof globalThis): voi
 
 describe('placeTip', () => {
   it('goes below the element', () => {
-    expect(placeTip({ x: 100, y: 100, width: 50, height: 20 }, { width: 200, height: 40 }, view)).toEqual({
+    expect(placeTip({ x: 100, y: 100, width: 50, height: 20 }, { width: 200, height: 40 }, view)).toMatchObject({
       x: 100,
       y: 126,
     });
@@ -46,17 +48,65 @@ describe('placeTip and the controls under it', () => {
     !boxes.some((o) => b.x < o.x + o.width && o.x < b.x + b.width && b.y < o.y + o.height && o.y < b.y + b.height);
   const belowBox = { x: 300, y: 126, width: 200, height: 40 };
   it('goes above when a control lies below', () => {
-    expect(placeTip(anchor, tip, view, 6, takenBy(belowBox))).toEqual({ x: 300, y: 100 - 6 - 40 });
+    expect(placeTip(anchor, tip, view, 6, takenBy(belowBox))).toEqual({ x: 300, y: 100 - 6 - 40, side: 'above' });
   });
   it('goes to the right, then to the left, when below and above are taken', () => {
     const notAt = (...spots: { x: number; y: number }[]) => (b: { x: number; y: number }) => !spots.some((p) => p.x === b.x && p.y === b.y);
     const below = { x: 300, y: 126 };
     const above = { x: 300, y: 54 };
-    expect(placeTip(anchor, tip, view, 6, notAt(below, above))).toEqual({ x: 356, y: 100 });
-    expect(placeTip(anchor, tip, view, 6, notAt(below, above, { x: 356, y: 100 }))).toEqual({ x: 94, y: 100 });
+    expect(placeTip(anchor, tip, view, 6, notAt(below, above))).toEqual({ x: 356, y: 100, side: 'right' });
+    expect(placeTip(anchor, tip, view, 6, notAt(below, above, { x: 356, y: 100 }))).toEqual({ x: 94, y: 100, side: 'left' });
   });
-  it('stays below when no place is free (a press on it takes it away then)', () => {
-    expect(placeTip(anchor, tip, view, 6, () => false)).toEqual({ x: 300, y: 126 });
+  it('stays below when no place is free (a press on it takes it away then), above when there is no room below', () => {
+    expect(placeTip(anchor, tip, view, 6, () => false)).toEqual({ x: 300, y: 126, side: 'below' });
+    const low = { x: 300, y: 570, width: 50, height: 20 };
+    expect(placeTip(low, tip, view, 6, () => false)).toEqual({ x: 300, y: 570 - 6 - 40, side: 'above' });
+  });
+  it('keeps the side it is told, whatever lies there (a popup that follows a scroll does not jump)', () => {
+    expect(placeTip(anchor, tip, view, 6, () => false, 'right')).toEqual({ x: 356, y: 100, side: 'right' });
+    // Kept inside the window on that side.
+    const edge = { x: 900, y: 100, width: 50, height: 20 };
+    expect(placeTip(edge, tip, view, 6, () => true, 'right').x).toBe(1000 - 200);
+  });
+});
+
+describe('ownControl', () => {
+  // Nodes as far as `contains` goes.
+  const node = (name: string, kids: { contains(n: unknown): boolean }[] = []) => {
+    const self = { name, contains: (n: unknown): boolean => n === self || kids.some((k) => k === n || k.contains(n)) };
+    return self;
+  };
+  it('is the element and what it holds, not what holds it', () => {
+    const input = node('input');
+    const label = node('label', [input]);
+    const tag = node('tag');
+    const card = node('card', [tag]);
+    expect(ownControl(label as unknown as Node, label as unknown as Node)).toBe(true);
+    expect(ownControl(input as unknown as Node, label as unknown as Node)).toBe(true);
+    expect(ownControl(card as unknown as Node, tag as unknown as Node)).toBe(false);
+  });
+});
+
+describe('liesOnControl', () => {
+  const box = { x: 100, y: 100, width: 200, height: 40 };
+  const small = { rect: { x: 150, y: 110, width: 16, height: 16 }, control: 'checkbox' };
+  const away = { rect: { x: 400, y: 100, width: 50, height: 20 }, control: 'far' };
+  it('finds a small control between the corners, that is really there', () => {
+    expect(liesOnControl(box, [away, small], () => 'checkbox')).toBe(true);
+  });
+  it('asks at the middle of the overlap, and a control under another layer is no press', () => {
+    const asked: [number, number][] = [];
+    expect(
+      liesOnControl(box, [small], (x, y) => {
+        asked.push([x, y]);
+        return 'the backdrop';
+      }),
+    ).toBe(false);
+    expect(asked).toEqual([[158, 118]]);
+  });
+  it('is free when no control meets the box', () => {
+    expect(liesOnControl(box, [away], () => 'far')).toBe(false);
+    expect(liesOnControl(box, [], () => null)).toBe(false);
   });
 });
 
@@ -277,7 +327,10 @@ describe('the popup in a page', () => {
     vi.advanceTimersByTime(SHOW_DELAY_MS);
     expect(p.host.hidden).toBe(false);
     p.fire('mouseover', p.tip);
-    p.fire('mousedown', p.tip);
+    // Another button than the main one opens a menu of the browser: the popup stays.
+    p.fire('mousedown', p.tip, { button: 2 });
+    expect(p.host.hidden).toBe(false);
+    p.fire('mousedown', p.tip, { button: 0 });
     expect(p.host.hidden).toBe(true);
   });
 

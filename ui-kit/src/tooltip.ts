@@ -15,11 +15,18 @@ export interface Box {
   height: number;
 }
 
+/** A side of its element the popup stands on. */
+export type Side = 'below' | 'above' | 'right' | 'left';
+
 /**
  * Where the popup goes: below the element, else above it, else to its right or left - the first place that fits in
  * the window and that `free` says covers no other control (a popup that stays while the pointer is on it would catch
  * the click meant for the control under it). When no place is free it goes below (above when there is no room below),
- * kept inside the window; a press on it then takes it away.
+ * kept inside the window; a press on it then takes it away. With `only` it stays on that side (kept inside the window):
+ * a popup that follows a scrolling element does not jump from side to side.
+ *
+ * Since v0.14.0 a popup that fits neither below nor above goes to the right or left when that fits (before, it was
+ * pushed into the window over its element).
  */
 export function placeTip(
   anchor: Box,
@@ -27,7 +34,8 @@ export function placeTip(
   view: { width: number; height: number },
   gap = 6,
   free: (box: Box) => boolean = () => true,
-): { x: number; y: number } {
+  only?: Side,
+): { x: number; y: number; side: Side } {
   const clampX = (x: number) => Math.max(0, Math.min(x, Math.max(0, view.width - tip.width)));
   const clampY = (y: number) => Math.max(0, Math.min(y, Math.max(0, view.height - tip.height)));
   const below = { x: clampX(anchor.x), y: anchor.y + anchor.height + gap };
@@ -36,25 +44,57 @@ export function placeTip(
   const left = { x: anchor.x - gap - tip.width, y: clampY(anchor.y) };
   const fits = (p: { x: number; y: number }) =>
     p.x >= 0 && p.y >= 0 && p.x + tip.width <= view.width && p.y + tip.height <= view.height;
-  for (const p of [below, above, right, left]) {
-    if (fits(p) && free({ ...p, width: tip.width, height: tip.height })) return p;
+  const places = { below, above, right, left };
+  if (only) {
+    const p = places[only];
+    return { x: clampX(p.x), y: clampY(p.y), side: only };
   }
-  const y = below.y + tip.height > view.height && above.y >= 0 ? above.y : below.y;
-  return { x: below.x, y: clampY(y) };
+  for (const side of ['below', 'above', 'right', 'left'] as const) {
+    const p = places[side];
+    if (fits(p) && free({ ...p, width: tip.width, height: tip.height })) return { ...p, side };
+  }
+  const up = below.y + tip.height > view.height && above.y >= 0;
+  return { x: below.x, y: clampY(up ? above.y : below.y), side: up ? 'above' : 'below' };
 }
 
-/** What a press can mean: the popup must not lie on one of these (of another element). */
-const CONTROL =
-  'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"]), [role="button"], ' +
-  '[role="menuitem"], [role="menuitemradio"], [role="checkbox"], [role="option"], [role="tab"]';
+/**
+ * What a press can mean: the popup must not lie on one of these (of another element). Not every element with a
+ * `tabindex`: a region that scrolls by the keyboard has one and is no control.
+ */
+export const CONTROL =
+  'a[href], button, input, select, textarea, summary, label, [contenteditable]:not([contenteditable="false"]), ' +
+  '[role="button"], [role="link"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], ' +
+  '[role="checkbox"], [role="radio"], [role="switch"], [role="option"], [role="tab"], [role="combobox"], ' +
+  '[role="slider"], [role="treeitem"]';
 
 /**
- * Where in a box it is looked whether a control is under it: a few points, not every pixel, near the edges as well (a
- * control that reaches a few pixels into the box catches the pointer there too).
+ * Whether a control is the hint's own (the element itself, or one it holds: a label and its field): those may be
+ * covered. A control that holds the element is not its own - a hint on a tag inside a card must not lie on the card.
  */
-const PROBES: readonly (readonly [number, number])[] = [0.05, 0.5, 0.95].flatMap((fy) =>
-  [0.05, 0.5, 0.95].map((fx) => [fx, fy] as const),
-);
+export function ownControl(control: Node, el: Node): boolean {
+  return control === el || el.contains(control);
+}
+
+/**
+ * Whether `box` lies on a control: one of `controls` whose rectangle meets it and that is really there in the middle
+ * of the overlap (`topControlAt` names the control the topmost thing at a point belongs to; one hidden under another
+ * layer is not pressed). Every control is looked at, a small one too.
+ */
+export function liesOnControl<C>(
+  box: Box,
+  controls: readonly { rect: Box; control: C }[],
+  topControlAt: (x: number, y: number) => C | null,
+): boolean {
+  for (const { rect, control } of controls) {
+    const x0 = Math.max(box.x, rect.x);
+    const y0 = Math.max(box.y, rect.y);
+    const x1 = Math.min(box.x + box.width, rect.x + rect.width);
+    const y1 = Math.min(box.y + box.height, rect.y + rect.height);
+    if (x1 <= x0 || y1 <= y0) continue;
+    if (topControlAt((x0 + x1) / 2, (y0 + y1) / 2) === control) return true;
+  }
+  return false;
+}
 
 /** The pause before a popup shows on hover, and the one before it goes when the pointer left. */
 export const SHOW_DELAY_MS = 300;
@@ -199,32 +239,47 @@ export function installTooltips(
     if (host.parentElement !== doc.body) doc.body.appendChild(host);
   }
 
-  /** No control of another element under `box` (the topmost thing at a few of its points that is not the popup). */
+  /**
+   * No control under `box` but the element's own (it, and what it holds). A control that holds the element counts:
+   * a hint on a tag inside a card must not lie on the card, whose press selects it.
+   */
   function freeFor(el: HTMLElement): (box: Box) => boolean {
-    return (box) => {
-      // A document without hit testing (a test without layout) has nothing to say.
-      if (typeof doc.elementsFromPoint !== 'function') return true;
-      for (const [fx, fy] of PROBES) {
-        const hit = doc
-          .elementsFromPoint(box.x + box.width * fx, box.y + box.height * fy)
-          .find((e) => !host.contains(e));
-        const control = hit?.closest(CONTROL);
-        if (control && control !== el && !control.contains(el) && !el.contains(control)) return false;
+    // A document without hit testing (a test without layout) has nothing to say.
+    if (typeof doc.elementsFromPoint !== 'function') return () => true;
+    const controls: { rect: Box; control: Element }[] = [];
+    for (const control of doc.querySelectorAll(CONTROL)) {
+      if (ownControl(control, el) || host.contains(control)) continue;
+      const r = control.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        controls.push({ rect: { x: r.x, y: r.y, width: r.width, height: r.height }, control });
       }
-      return true;
-    };
+    }
+    const topControlAt = (x: number, y: number): Element | null =>
+      doc
+        .elementsFromPoint(x, y)
+        .find((e) => !host.contains(e))
+        ?.closest(CONTROL) ?? null;
+    return (box) => !liesOnControl(box, controls, topControlAt);
   }
 
-  function place(el: HTMLElement): void {
+  /** The side the popup was put on when it was shown: a scroll moves it with its element, on that side. */
+  let side: Side | undefined;
+
+  function place(el: HTMLElement, keepSide = false): void {
     const anchor = el.getBoundingClientRect();
+    // Measured at the corner of the window: where it stood before (for another element) caps its width there.
+    tip.style.left = '0px';
+    tip.style.top = '0px';
     const size = tip.getBoundingClientRect();
     const at = placeTip(
       { x: anchor.x, y: anchor.y, width: anchor.width, height: anchor.height },
       { width: size.width, height: size.height },
       { width: win.innerWidth, height: win.innerHeight },
       6,
-      freeFor(el),
+      keepSide && side ? () => true : freeFor(el),
+      keepSide ? side : undefined,
     );
+    side = at.side;
     tip.style.left = `${at.x}px`;
     tip.style.top = `${at.y}px`;
   }
@@ -287,7 +342,10 @@ export function installTooltips(
   // place). That press is lost, the next one reaches the control.
   const onDown = (e: Event): void => {
     pressing = true;
-    if (!tip.hidden && e.target instanceof win.Node && tip.contains(e.target)) hide();
+    // The main button only: another one opens a menu of the browser, and nothing was meant to be pressed under it.
+    if ((e as MouseEvent).button === 0 && !tip.hidden && e.target instanceof win.Node && tip.contains(e.target)) {
+      hide();
+    }
   };
   const onUp = (): void => {
     pressing = false;
@@ -329,7 +387,7 @@ export function installTooltips(
     if (tip.hidden) return;
     // The browser scrolls a focused element into view after `focusin`: the popup follows it. A scroll with the
     // pointer takes the popup away (it would stand where the element no longer is).
-    if (viaFocus && current) place(current);
+    if (viaFocus && current) place(current, true);
     else hide();
   };
 
