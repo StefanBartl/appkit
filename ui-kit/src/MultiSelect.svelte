@@ -20,6 +20,8 @@
     resetLabel,
     searchLabel,
     hint = '',
+    note = '',
+    match,
   }: {
     label: string;
     options: readonly Option[];
@@ -29,20 +31,41 @@
     searchLabel: string;
     /** What the choice is for: the hint popup shows it on the button (not while the choice is open). */
     hint?: string;
+    /** One line at the top of the open popup, e.g. how the chosen values combine ("any of these"). */
+    note?: string;
+    /**
+     * A switch between "any of the chosen values" and "all of them", for a field a task can hold several values of
+     * (tags). Left out, the choice has no switch; the app says in `note` how its values combine.
+     */
+    match?: {
+      value: 'any' | 'all';
+      anyLabel: string;
+      allLabel: string;
+      onchange: (value: 'any' | 'all') => void;
+    };
   } = $props();
 
+  // The radios of the any/all switch form one group per choice, never one across the page.
+  const uid = $props.id();
   let open = $state(false);
   let needle = $state('');
   let root: HTMLElement | undefined = $state();
   let button: HTMLButtonElement | undefined = $state();
+  // The width of the button when the popup opened. The label names what is chosen ("Areas: 2"), so it grows and
+  // shrinks with every tick; the row around it would move and the popup, which hangs from the button, with it - the
+  // next click would land beside the option it was aimed at. While the popup is open the button keeps this width.
+  let openWidth = $state(0);
 
   // A list that long is worth a way to narrow it.
   const SEARCH_FROM = 10;
-  const shownOptions = $derived(
-    needle.trim() === ''
-      ? options
-      : options.filter((o) => o.label.toLowerCase().includes(needle.trim().toLowerCase())),
-  );
+  // The search finds an option by its label, its value or its more words (a real name or an alias behind a label).
+  const shownOptions = $derived.by(() => {
+    const word = needle.trim().toLowerCase();
+    if (word === '') return options;
+    return options.filter((o) =>
+      [o.label, o.value, o.title ?? ''].some((text) => text.toLowerCase().includes(word)),
+    );
+  });
   const summary = $derived.by(() => {
     if (selected.length === 0) return label;
     if (selected.length === 1) {
@@ -56,8 +79,14 @@
     onchange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
   }
 
+  function openPopup(): void {
+    openWidth = button?.getBoundingClientRect().width ?? 0;
+    open = true;
+  }
+
   function close(focusButton: boolean): void {
     open = false;
+    openWidth = 0;
     needle = '';
     if (focusButton) button?.focus();
   }
@@ -108,16 +137,43 @@
     class:active={selected.length > 0}
     aria-haspopup="true"
     aria-expanded={open}
+    class:held={open && openWidth > 0}
+    style:width={open && openWidth > 0 ? `${openWidth}px` : undefined}
     use:tooltip={open ? '' : hint}
-    onclick={() => (open ? close(false) : (open = true))}
+    onclick={() => (open ? close(false) : openPopup())}
   >
-    <span>{summary}</span>
+    <span class="summary">{summary}</span>
     <span class="caret" aria-hidden="true">▾</span>
   </button>
   {#if open}
     <!-- The listener steers the focus only (see onPopupMouseDown); the group itself is not interactive. -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div class="popup" role="group" aria-label={label} onmousedown={onPopupMouseDown}>
+      {#if note !== ''}<p class="note">{note}</p>{/if}
+      {#if match}
+        <div class="match" role="radiogroup" aria-label={label}>
+          <label>
+            <input
+              type="radio"
+              name={`match-${uid}`}
+              value="any"
+              checked={match.value === 'any'}
+              onchange={() => match.onchange('any')}
+            />
+            <span>{match.anyLabel}</span>
+          </label>
+          <label>
+            <input
+              type="radio"
+              name={`match-${uid}`}
+              value="all"
+              checked={match.value === 'all'}
+              onchange={() => match.onchange('all')}
+            />
+            <span>{match.allLabel}</span>
+          </label>
+        </div>
+      {/if}
       {#if options.length >= SEARCH_FROM}
         <input
           type="search"
@@ -166,9 +222,35 @@
   .trigger.active {
     border-color: var(--accent);
   }
+  /* A held button cuts its label instead of growing with it (see openWidth). */
+  .trigger.held {
+    box-sizing: border-box;
+  }
+  .trigger.held .summary {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .caret {
     color: var(--muted);
     font-size: 0.8em;
+  }
+  .note {
+    margin: 0 0 0.3rem;
+    color: var(--muted);
+    font-size: 0.85em;
+  }
+  .match {
+    display: flex;
+    gap: 0.8rem;
+    margin-bottom: 0.3rem;
+  }
+  .match label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
   }
   .popup {
     position: absolute;
