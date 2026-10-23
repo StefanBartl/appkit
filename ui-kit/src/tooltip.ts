@@ -67,6 +67,9 @@ export const CONTROL =
   '[role="checkbox"], [role="radio"], [role="switch"], [role="option"], [role="tab"], [role="combobox"], ' +
   '[role="slider"], [role="treeitem"]';
 
+/** What a popup must not lie on: a control, or another element with a hint of its own. */
+const KEEP_FREE = `${CONTROL}, [data-hint]`;
+
 /**
  * Whether a control is the hint's own (the element itself, or one it holds: a label and its field): those may be
  * covered. A control that holds the element is not its own - a hint on a tag inside a card must not lie on the card.
@@ -241,13 +244,14 @@ export function installTooltips(
 
   /**
    * No control under `box` but the element's own (it, and what it holds). A control that holds the element counts:
-   * a hint on a tag inside a card must not lie on the card, whose press selects it.
+   * a hint on a tag inside a card must not lie on the card, whose press selects it. Another element with a hint counts
+   * too: the pointer on its way there would rest on the popup and never show the next hint.
    */
   function freeFor(el: HTMLElement): (box: Box) => boolean {
     // A document without hit testing (a test without layout) has nothing to say.
     if (typeof doc.elementsFromPoint !== 'function') return () => true;
     const controls: { rect: Box; control: Element }[] = [];
-    for (const control of doc.querySelectorAll(CONTROL)) {
+    for (const control of doc.querySelectorAll(KEEP_FREE)) {
       if (ownControl(control, el) || host.contains(control)) continue;
       const r = control.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) {
@@ -258,7 +262,7 @@ export function installTooltips(
       doc
         .elementsFromPoint(x, y)
         .find((e) => !host.contains(e))
-        ?.closest(CONTROL) ?? null;
+        ?.closest(KEEP_FREE) ?? null;
     return (box) => !liesOnControl(box, controls, topControlAt);
   }
 
