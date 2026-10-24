@@ -70,6 +70,19 @@ Options of both scripts: another release (`-Version vX.Y.Z` / `--version`), the 
 more arguments for the install step (`-InstallArgs '--autostart'` / `-- --autostart`). An unstamped
 copy (the one in this folder) takes the stamped values as options (`-Repo`, `-Kind`, ...).
 
+The `irm ... | iex` line takes no arguments. To pass some without saving the file, make a script block
+of the text, which takes them (tried in PowerShell 7 and Windows PowerShell 5.1):
+
+```
+& ([scriptblock]::Create((irm https://github.com/OWNER/NAME/releases/download/latest/install.ps1))) -InstallArgs '--autostart'
+```
+
+A saved `install.ps1` runs as `powershell -ExecutionPolicy Bypass -File .\install.ps1 ...`. Through
+`powershell -File` a command line cannot carry an array: `-InstallArgs 'a','b'` arrives as one string,
+so pass one value there, or call the script from a PowerShell session (`& .\install.ps1 -InstallArgs 'a','b'`),
+where arrays are arrays. A silent setup does not run the optional steps of its wizard (an Inno `unchecked`
+task such as "add to PATH") unless they are named in `-InstallArgs` (`/TASKS=addtopath`).
+
 ## Using it in an app
 
 Pin the actions by commit, with the tag in a comment (NREL-03). The rolling build, in
