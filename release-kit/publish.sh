@@ -132,13 +132,18 @@ if [ "$TAG" = "latest" ]; then
     fi
     {
         notes
-        printf '\nBuilt from commit `%s`.\n' "$SHA"
+        printf '\nBuilt from commit %s%s%s.\n' '`' "$SHA" '`'
     } > "$stage.notes"
     gh release edit latest --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
         --title "Rolling build (${SHA:0:7})" --notes-file "$stage.notes"
 else
     if draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)"; then
         [ "$draft" = "true" ] || fail "the release $TAG is published: it is never cut again (NREL-10), make a patch release"
+        # A draft of an earlier cut (the tag was set again) gets the words of this one.
+        if [ -n "$NOTES_FILE" ]; then
+            notes > "$stage.notes"
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft --notes-file "$stage.notes"
+        fi
     else
         notes > "$stage.notes"
         gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$TAG" \

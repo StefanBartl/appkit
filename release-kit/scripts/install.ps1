@@ -81,35 +81,35 @@ Parameters (all optional):
     # matches before a final line break.
     $plain = '^[A-Za-z0-9._-]+\z'
 
-    function Stop-Install([string] $Message) {
+    function Exit-Install([string] $Message) {
         throw "install.ps1: $Message"
     }
 
-    function Pick([string] $Given, [string] $Stamped) {
+    function Select-Given([string] $Given, [string] $Stamped) {
         if ($Given -ne '') { return $Given }
         return $Stamped
     }
 
-    $repo = Pick $Repo $StampRepo
-    $app = Pick $App $StampApp
-    $kind = Pick $Kind $StampKind
-    $program = Pick $Program $StampProgram
-    $releaseAsset = Pick $ReleaseAsset $StampReleaseAsset
-    $rollingAsset = Pick $RollingAsset $StampRollingAsset
+    $repo = Select-Given $Repo $StampRepo
+    $app = Select-Given $App $StampApp
+    $kind = Select-Given $Kind $StampKind
+    $program = Select-Given $Program $StampProgram
+    $releaseAsset = Select-Given $ReleaseAsset $StampReleaseAsset
+    $rollingAsset = Select-Given $RollingAsset $StampRollingAsset
 
     if ($app -eq '') { $app = 'app' }
-    if ($app -cnotmatch $plain) { Stop-Install "-App must be a plain word: $app" }
+    if ($app -cnotmatch $plain) { Exit-Install "-App must be a plain word: $app" }
     if (@('hub', 'nsis', 'inno') -cnotcontains $kind) {
-        Stop-Install "-Kind must be hub, nsis or inno (this copy is not stamped: give -Kind and the rest)"
+        Exit-Install "-Kind must be hub, nsis or inno (this copy is not stamped: give -Kind and the rest)"
     }
     if ($kind -eq 'hub' -and $program -cnotmatch $plain) {
-        Stop-Install '-Program must be the file name of the program'
+        Exit-Install '-Program must be the file name of the program'
     }
 
     # The app belongs to one user: elevated, it would be the administrator account.
     $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
     if (-not $AllowElevated -and $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Stop-Install 'do not run this elevated: it installs for one user, without administrator rights (-AllowElevated for a build machine)'
+        Exit-Install 'do not run this elevated: it installs for one user, without administrator rights (-AllowElevated for a build machine)'
     }
 
     $work = Join-Path ([IO.Path]::GetTempPath()) ("$app-install-" + [Guid]::NewGuid().ToString('N'))
@@ -117,10 +117,10 @@ Parameters (all optional):
     try {
         if ($File -eq '') {
             if ($repo -cnotmatch '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\z') {
-                Stop-Install '-Repo must be OWNER/NAME (this copy is not stamped)'
+                Exit-Install '-Repo must be OWNER/NAME (this copy is not stamped)'
             }
             if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
-                Stop-Install "no build for Windows on $env:PROCESSOR_ARCHITECTURE"
+                Exit-Install "no build for Windows on $env:PROCESSOR_ARCHITECTURE"
             }
             # Windows PowerShell 5.1 may offer a fixed set without TLS 1.2: it is added, nothing taken
             # away. SystemDefault (0, what pwsh has) lets the system choose, TLS 1.3 included: left alone.
@@ -152,16 +152,16 @@ Parameters (all optional):
                 }
             }
             if ($channel -cnotmatch $plain) {
-                Stop-Install "the version has a character that is not allowed: $channel"
+                Exit-Install "the version has a character that is not allowed: $channel"
             }
             if ($channel -eq 'latest') {
-                $name = $rollingAsset
+                $name = $rollingAsset.Replace('{triple}', 'x86_64-pc-windows-msvc')
             }
             else {
                 $name = $releaseAsset.Replace('{version}', ($channel -replace '^v', '')).Replace('{triple}', 'x86_64-pc-windows-msvc')
             }
-            if ($name -eq '') { Stop-Install "the channel $channel has no build for Windows" }
-            if ($name -cnotmatch $plain) { Stop-Install "the file name is not a plain word: $name" }
+            if ($name -eq '') { Exit-Install "the channel $channel has no build for Windows" }
+            if ($name -cnotmatch $plain) { Exit-Install "the file name is not a plain word: $name" }
 
             $base = "https://github.com/$repo/releases/download/$channel"
             Write-Output "downloading $name ($channel)"
@@ -172,14 +172,14 @@ Parameters (all optional):
             }
             catch {
                 if ($channel -eq 'latest') {
-                    Stop-Install 'SHA256SUMS of the rolling build is missing (a build is running: try again in a few minutes)'
+                    Exit-Install 'SHA256SUMS of the rolling build is missing (a build is running: try again in a few minutes)'
                 }
                 throw
             }
             $Sums = Join-Path $work 'SHA256SUMS'
         }
         else {
-            if (-not (Test-Path -LiteralPath $File -PathType Leaf)) { Stop-Install "no such file: $File" }
+            if (-not (Test-Path -LiteralPath $File -PathType Leaf)) { Exit-Install "no such file: $File" }
             # The full path: a bare name would be checked here but run from the PATH (an old install).
             $path = (Resolve-Path -LiteralPath $File).ProviderPath
         }
@@ -192,8 +192,8 @@ Parameters (all optional):
                 $beside = Join-Path (Split-Path -Parent $path) 'SHA256SUMS'
                 if (Test-Path -LiteralPath $beside -PathType Leaf) { $Sums = $beside }
             }
-            if ($Sums -eq '') { Stop-Install "no checksum for ${path}: give -Sums FILE or -Sha256 HEX" }
-            if (-not (Test-Path -LiteralPath $Sums -PathType Leaf)) { Stop-Install "no such file: $Sums" }
+            if ($Sums -eq '') { Exit-Install "no checksum for ${path}: give -Sums FILE or -Sha256 HEX" }
+            if (-not (Test-Path -LiteralPath $Sums -PathType Leaf)) { Exit-Install "no such file: $Sums" }
             $leaf = Split-Path -Leaf $path
             foreach ($line in Get-Content -LiteralPath $Sums) {
                 # Lines are "<hash>  <file>" (or "<hash> *<file>"); the file name must match whole.
@@ -202,10 +202,10 @@ Parameters (all optional):
                     break
                 }
             }
-            if ($expected -eq '') { Stop-Install "$leaf is not listed in $Sums" }
+            if ($expected -eq '') { Exit-Install "$leaf is not listed in $Sums" }
         }
         if ($actual -ne $expected.ToLowerInvariant()) {
-            Stop-Install "the checksum of $path does not match (expected $($expected.ToLowerInvariant()), got $actual): nothing was installed"
+            Exit-Install "the checksum of $path does not match (expected $($expected.ToLowerInvariant()), got $actual): nothing was installed"
         }
         Write-Output 'checksum ok'
 
@@ -223,7 +223,7 @@ Parameters (all optional):
                     foreach ($entry in $zip.Entries) {
                         $target = [IO.Path]::GetFullPath([IO.Path]::Combine($root, $entry.FullName))
                         if (-not $target.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
-                            Stop-Install "the archive holds a path that leaves its folder ($($entry.FullName)): nothing was installed"
+                            Exit-Install "the archive holds a path that leaves its folder ($($entry.FullName)): nothing was installed"
                         }
                     }
                 }
@@ -232,14 +232,14 @@ Parameters (all optional):
                 }
                 [IO.Compression.ZipFile]::ExtractToDirectory($path, $unpacked)
                 $exe = Join-Path $unpacked $program
-                if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { Stop-Install "the archive holds no $program" }
+                if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { Exit-Install "the archive holds no $program" }
             }
             $newVersion = (& $exe --version)
-            if ($LASTEXITCODE -ne 0) { Stop-Install 'the program does not run' }
+            if ($LASTEXITCODE -ne 0) { Exit-Install 'the program does not run' }
             Write-Output "installing $newVersion"
             # `install` copies the program to its fixed place; its exit status is ours.
             & $exe install @InstallArgs
-            if ($LASTEXITCODE -ne 0) { Stop-Install "$program install failed (see above)" }
+            if ($LASTEXITCODE -ne 0) { Exit-Install "$program install failed (see above)" }
             Write-Output "installed $newVersion"
         }
         else {
@@ -255,7 +255,7 @@ Parameters (all optional):
             }
             Write-Output "running the setup silently ($($flags -join ' '))"
             $proc = Start-Process -FilePath $path -ArgumentList $flags -Wait -PassThru
-            if ($proc.ExitCode -ne 0) { Stop-Install "the setup failed with exit code $($proc.ExitCode)" }
+            if ($proc.ExitCode -ne 0) { Exit-Install "the setup failed with exit code $($proc.ExitCode)" }
             Write-Output "installed $app"
         }
     }

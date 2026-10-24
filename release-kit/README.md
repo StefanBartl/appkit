@@ -25,7 +25,8 @@ uploading, checking, naming.
   this one no longer has go, and only at the end does the tag move to the commit and the page name it:
   a run that stops in between leaves the page naming the previous commit.
 - **`vX.Y.Z`** is a release from a tag, left as a **draft** (NREL-07): a person installs it, opens it,
-  and publishes it. A published release is never touched again (NREL-10).
+  and publishes it. A published release is never touched again (NREL-10). A draft that is there
+  already (the tag was set again on a newer commit) gets the files and the notes of this run.
 
 The tag `latest` is moved with the token of the workflow. Should GitHub refuse that (a token may not
 point a ref past a change of `.github/workflows` without the `workflows` right), the run only warns:
@@ -148,9 +149,11 @@ A release (`release.yml`, on a tag `v*`) has the same `build` and `publish` jobs
 before the build. Give `windows-release-asset` and `windows-rolling-asset` both in either workflow:
 the stamped script of a release still offers `-Rolling`, and the other way round.
 
-`{version}` (the tag without its `v`) and `{triple}` (`x86_64-pc-windows-msvc`,
+`{version}` (the tag without its `v`, release assets only) and `{triple}` (`x86_64-pc-windows-msvc`,
 `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`) are filled in by the script on the user's
-machine. `extra` attaches more files of the repository (an `uninstall.ps1`), checked like the rest.
+machine. A `unix-rolling-asset` without `{triple}` is a build for Linux x86-64: `install.sh` of the
+rolling build stops on any other system instead of downloading a file that would not run there.
+`extra` attaches more files of the repository (an `uninstall.ps1`), checked like the rest.
 
 ## Checks
 

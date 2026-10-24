@@ -96,7 +96,7 @@ cp "$FIXTURES/$name" "$out"
 """
 
 FAKE_UNAME = """#!/bin/sh
-case "$1" in -s) echo Linux ;; -m) echo x86_64 ;; *) echo Linux ;; esac
+case "$1" in -m) echo "${FAKE_MACHINE:-x86_64}" ;; *) echo "${FAKE_SYSTEM:-Linux}" ;; esac
 """
 POWERSHELLS = [p for p in (shutil.which("pwsh"), shutil.which("powershell")) if p] if WINDOWS else []
 
@@ -315,6 +315,22 @@ class InstallShTest(unittest.TestCase):
         res = self.download(self.stamped(rolling_asset="demo-hub-linux-x86_64.tar.gz"))
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertEqual(self.urls()[0], "https://github.com/Owner/app-repo/releases/download/latest/demo-hub-linux-x86_64.tar.gz")
+
+    def test_the_rolling_build_of_linux_is_not_installed_on_a_mac(self) -> None:
+        self.fixtures("demo-hub-linux-x86_64.tar.gz")
+        res = self.download(self.stamped(rolling_asset="demo-hub-linux-x86_64.tar.gz"),
+                            FAKE_SYSTEM="Darwin", FAKE_MACHINE="arm64")
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("for Linux x86-64 only", res.stderr)
+        self.assertEqual(self.urls(), [], "nothing is downloaded")
+
+    def test_a_rolling_build_named_by_its_system(self) -> None:
+        self.fixtures("demo-hub-aarch64-apple-darwin.tar.gz")
+        res = self.download(self.stamped(rolling_asset="demo-hub-{triple}.tar.gz"),
+                            FAKE_SYSTEM="Darwin", FAKE_MACHINE="arm64")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(self.urls()[0],
+                         "https://github.com/Owner/app-repo/releases/download/latest/demo-hub-aarch64-apple-darwin.tar.gz")
 
     def test_no_channel_takes_the_newest_release(self) -> None:
         self.fixtures("demo-hub-9.9.9-x86_64-unknown-linux-gnu.tar.gz")
@@ -538,6 +554,14 @@ class InstallPs1Test(unittest.TestCase):
             self.assertEqual(self.urls(), [base + "demo-1.2.3-setup.cmd", base + "SHA256SUMS"])
             self.assertEqual(self.out_text(), "/S")
 
+    def test_a_rolling_build_named_by_its_system(self) -> None:
+        self.fixtures("demo-x86_64-pc-windows-msvc-setup.cmd")
+        script = self.stamped(kind="nsis", program="", rolling_asset="demo-{triple}-setup.cmd")
+        for shell in self.each_shell():
+            res = self.download(shell, script)
+            self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+            self.assertIn("/download/latest/demo-x86_64-pc-windows-msvc-setup.cmd", self.urls()[0])
+
     def test_no_release_at_all_takes_the_rolling_build(self) -> None:
         self.fixtures("demo-setup.cmd")
         args = "-Repo Owner/app-repo -Kind nsis -RollingAsset demo-setup.cmd"
@@ -715,6 +739,15 @@ class PublishTest(unittest.TestCase):
         for name in ("install.ps1", "install.sh", "SHA256SUMS", "demo-hub-windows-x86_64.exe"):
             self.assertIn(name, upload)
         self.assertFalse(any("git/refs/tags" in c for c in calls), "a release tag is never moved")
+
+    def test_a_draft_of_an_earlier_cut_gets_the_words_of_this_one(self) -> None:
+        notes = self.tmp / "notes.md"
+        notes.write_text("the words of this cut\n")
+        res = self.publish(TAG="v1.2.3", SHA="", GH_DRAFT="true", NOTES_FILE=notes.as_posix())
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        calls = self.calls()
+        self.assertFalse(any(c.startswith("gh release create") for c in calls), "the draft is there")
+        self.assertTrue(any(c.startswith("gh release edit v1.2.3") and "--notes-file" in c for c in calls), calls)
 
     def test_a_published_release_is_not_touched(self) -> None:
         res = self.publish(TAG="v1.2.3", SHA="", GH_DRAFT="false")

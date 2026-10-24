@@ -73,6 +73,19 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then py=python; else py=python3; fi
           "$py" -m unittest discover -s release-kit -p "test_*.py" -v
+      # The scripts every release of every app carries: no finding of shellcheck (any level) and of
+      # PSScriptAnalyzer (errors, warnings and information).
+      - name: shellcheck on the shell scripts
+        if: runner.os == 'Linux'
+        run: shellcheck release-kit/scripts/install.sh release-kit/publish.sh
+      - name: PSScriptAnalyzer on install.ps1
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser -Force
+          $found = Invoke-ScriptAnalyzer -Path release-kit/scripts/install.ps1 -Severity Error, Warning, Information
+          $found | Format-Table -AutoSize | Out-String | Write-Output
+          if ($found) { exit 1 }
 
   # The browser parts of the kit (ui-kit): source only, checked and tested here; the apps bundle it.
   ui-kit:
