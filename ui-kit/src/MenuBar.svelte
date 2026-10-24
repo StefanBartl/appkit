@@ -216,6 +216,7 @@
         aria-keyshortcuts={item.shortcut ? ariaShortcut(item.shortcut) : undefined}
         disabled={(item.kind === 'action' || item.kind === 'radio') && item.disabled}
         tabindex="-1"
+        use:tooltip={item.hint ?? ''}
         onclick={() => pick(item)}
         onkeydown={(e) => onItemKey(e, id)}
       >

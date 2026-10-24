@@ -1,10 +1,22 @@
 // The model of the menu bar and the logic that needs no DOM: how the items fall into sections, which menu an
 // Alt+letter opens, which item a typed letter goes to, and how a label shows its mnemonic.
 
+/**
+ * An item that can be chosen may carry a `hint`: what it does or shows, in the hint popup (`tooltip.ts`) on hover and
+ * focus of the item. A disabled button gets no pointer events from the browser, so its hint shows on focus only.
+ */
 export type MenuItem =
-  | { kind: 'action'; label: string; onselect: () => void; disabled?: boolean; shortcut?: string }
-  | { kind: 'radio'; label: string; checked: boolean; onselect: () => void; disabled?: boolean; shortcut?: string }
-  | { kind: 'check'; label: string; checked: boolean; onselect: () => void; shortcut?: string }
+  | { kind: 'action'; label: string; onselect: () => void; disabled?: boolean; shortcut?: string; hint?: string }
+  | {
+      kind: 'radio';
+      label: string;
+      checked: boolean;
+      onselect: () => void;
+      disabled?: boolean;
+      shortcut?: string;
+      hint?: string;
+    }
+  | { kind: 'check'; label: string; checked: boolean; onselect: () => void; shortcut?: string; hint?: string }
   | { kind: 'info'; label: string }
   | { kind: 'section'; label: string }
   | { kind: 'separator' };

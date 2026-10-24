@@ -49,7 +49,7 @@ take every label as a prop, and `i18n.ts` only fills holes and picks a language.
 A menu is a list of items; `{ kind: 'section', label }` starts a group with a heading (a line is drawn before it),
 `{ kind: 'separator' }` is a line of its own, and an action, radio or check item may carry `shortcut: 'Ctrl+N'`. The
 shortcut is shown on the right and announced (`aria-keyshortcuts`); the app binds the key itself. A menu may carry a `hint`, which the hint popup shows on its
-trigger in the bar (not while the menu is open: the popup would lie over its first items). A menu with
+trigger in the bar (not while the menu is open: the popup would lie over its first items). An action, radio or check item may carry a `hint` too: it shows on hover and focus of the item (a disabled item gets no pointer events from the browser, so its hint shows on focus only). A menu with
 `mnemonic: 'p'` opens on Alt+P and shows the letter underlined. Inside an open menu the arrow keys, Home and End walk
 the items, a letter goes to the next item that starts with it, Left and Right change the menu, Escape closes.
 Alt+letter is left alone while a modal dialog is open or when another handler took the key; on a Mac, where Option+letter

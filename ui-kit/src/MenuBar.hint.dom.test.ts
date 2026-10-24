@@ -10,7 +10,15 @@ import { installTooltips } from './tooltip';
 const noop = () => {};
 const menus: Menu[] = [
   { id: 'project', label: 'Project', hint: 'The project', items: [{ kind: 'action', label: 'New', onselect: noop }] },
-  { id: 'view', label: 'View', items: [{ kind: 'action', label: 'Zoom', onselect: noop }] },
+  {
+    id: 'view',
+    label: 'View',
+    items: [
+      { kind: 'action', label: 'Zoom', onselect: noop },
+      { kind: 'radio', label: 'Plan', checked: true, onselect: noop, hint: 'The plan of the tasks' },
+      { kind: 'check', label: 'Short', checked: false, onselect: noop, hint: 'Short names' },
+    ],
+  },
 ];
 
 let app: ReturnType<typeof mount> | undefined;
@@ -58,5 +66,17 @@ describe('the hint of a menu', () => {
     await settle();
     expect(document.querySelector('[data-menu="project"]')).toBeNull();
     expect(trigger('project').getAttribute('data-hint')).toBe('The project');
+  });
+});
+
+describe('the hint of an item', () => {
+  it('is on the items that have one and on no other, and shows on focus', async () => {
+    trigger('view').click();
+    await settle();
+    const items = [...document.querySelectorAll<HTMLButtonElement>('[data-menu="view"] button.mb-item')];
+    expect(items.map((i) => i.getAttribute('data-hint'))).toEqual([null, 'The plan of the tasks', 'Short names']);
+    items[1]!.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(tip().hidden).toBe(false);
+    expect(tip().textContent).toBe('The plan of the tasks');
   });
 });
