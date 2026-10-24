@@ -106,6 +106,16 @@ export {
   type SseMessage,
   type StreamHandlers,
 } from './sse';
+export {
+  helpItems,
+  isHttps,
+  searchDocs,
+  SNIPPET,
+  type DocEntry,
+  type DocHit,
+  type HelpOptions,
+} from './docs';
+export { closeOnBackdrop, isOutside, type BackdropOptions, type Rect } from './backdrop';
 export { hasHidden, markHidden } from './text';
 export {
   HIDE_DELAY_MS,

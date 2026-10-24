@@ -2,6 +2,7 @@
   // The command palette (Ctrl+K): one box, the actions of the page and its entries in one list. The arrow keys
   // choose, Enter runs, Escape closes. The page works out the list (`items`), runs the choice (`onchoose`) and
   // remembers it; this component is the box, the list and the keys.
+  import { closeOnBackdrop } from './backdrop';
   import { stepIndex, type PaletteItem } from './palette';
   import { markHidden } from './text';
 
@@ -82,6 +83,7 @@
 <dialog
   bind:this={dialog}
   aria-label={labels.title}
+  use:closeOnBackdrop
   oncancel={() => onclose()}
   onclose={() => {
     if (!dialog?.open) onclose();
