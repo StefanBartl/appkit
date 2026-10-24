@@ -156,6 +156,11 @@ build for Linux x86-64: `install.sh` stops on any other system, in either channe
 downloading a file that would not run there.
 `extra` attaches more files of the repository (an `uninstall.ps1`), checked like the rest.
 
+The release page of a tag: `title` is its title (default: the tag; one line), and `{tag}` in the file of
+`notes-file` is replaced by the tag, so the notes can show the install line of exactly that release
+(`…/releases/download/{tag}/install.ps1`). The rolling build names its commit in its title itself. A draft
+that is there already gets the title and the notes of this run.
+
 ## Checks
 
 ```

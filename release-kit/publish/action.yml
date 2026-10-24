@@ -33,6 +33,7 @@
 #             scripts/uninstall.ps1
 #             scripts/uninstall.sh
 #           notes-file: .github/rolling-notes.md
+#           title: my-app ${{ github.ref_name }}      # a release only; default: the tag
 #
 # What it does, in order: release-kit/publish.sh.
 
@@ -96,7 +97,11 @@ inputs:
     required: false
     default: ""
   notes-file:
-    description: The words of the release page (the rolling build adds the commit below them).
+    description: The words of the release page (the rolling build adds the commit below them). {tag} in it is the tag.
+    required: false
+    default: ""
+  title:
+    description: The title of the release page of a tag (default: the tag). The rolling build names its commit itself.
     required: false
     default: ""
 
@@ -123,4 +128,5 @@ runs:
         UNIX_ROLLING_ASSET: ${{ inputs.unix-rolling-asset }}
         EXTRA: ${{ inputs.extra }}
         NOTES_FILE: ${{ inputs.notes-file }}
+        TITLE: ${{ inputs.title }}
       run: bash "$KIT/publish.sh"

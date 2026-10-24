@@ -26,6 +26,7 @@ SHA="${SHA:-}"
 APP="${APP:-}"
 EXTRA="${EXTRA:-}"
 NOTES_FILE="${NOTES_FILE:-}"
+TITLE="${TITLE:-}"
 PYTHON="${PYTHON:-python3}"
 
 case "$TAG" in
@@ -37,6 +38,9 @@ case "$TAG" in
         ;;
     *) fail "tag must be latest or vX.Y.Z, got '$TAG'" ;;
 esac
+# The title of a release page (a rolling build names its commit itself).
+TITLE="${TITLE:-$TAG}"
+[[ "$TITLE" != *$'\n'* ]] || fail "title must be one line"
 [[ "$EXPECT" =~ ^[0-9]+$ ]] || fail "expect must be a number, got '$EXPECT'"
 [ -d "$FILES" ] || fail "no folder $FILES (download the build artifacts there first)"
 [[ "$APP" =~ ^[A-Za-z0-9._-]+$ ]] || fail "app must be a plain word, got '$APP'"
@@ -95,10 +99,11 @@ mapfile -t names < <(find "$stage" -mindepth 1 -maxdepth 1 -type f -printf '%f\n
 say "files of $TAG:"
 cat "$stage.sums"
 
+# The words of the release page; {tag} in the notes file is the tag (the command to install this release).
 notes() {
     if [ -n "$NOTES_FILE" ]; then
         [ -f "$NOTES_FILE" ] || fail "no such notes file: $NOTES_FILE"
-        cat "$NOTES_FILE"
+        sed "s/{tag}/$TAG/g" "$NOTES_FILE"
     fi
 }
 
@@ -142,11 +147,13 @@ else
         # A draft of an earlier cut (the tag was set again) gets the words of this one.
         if [ -n "$NOTES_FILE" ]; then
             notes > "$stage.notes"
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft --notes-file "$stage.notes"
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft --title "$TITLE" --notes-file "$stage.notes"
+        else
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft --title "$TITLE"
         fi
     else
         notes > "$stage.notes"
-        gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$TAG" \
+        gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$TITLE" \
             --notes-file "$stage.notes"
     fi
     cp "$stage.sums" "$stage/SHA256SUMS"

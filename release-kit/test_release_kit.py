@@ -768,6 +768,39 @@ class PublishTest(unittest.TestCase):
         self.assertFalse(any(c.startswith("gh release create") for c in calls), "the draft is there")
         self.assertTrue(any(c.startswith("gh release edit v1.2.3") and "--notes-file" in c for c in calls), calls)
 
+    def test_the_title_and_the_tag_in_the_notes(self) -> None:
+        notes = self.tmp / "notes.md"
+        notes.write_text("install: .../download/{tag}/install.sh\n")
+        sent = self.tmp / "sent-notes.md"
+        gh = self.bin / "gh"
+        copy = f'if [ "$1 $2" = "release create" ]; then for a in "$@"; do [ -f "$a" ] && cp "$a" "{sent.as_posix()}"; done; fi\n'
+        self.assertTrue(FAKE_GH.endswith("exit 0\n"))
+        gh.write_text(FAKE_GH[: -len("exit 0\n")] + copy + "exit 0\n", encoding="utf-8", newline="\n")
+        res = self.publish(TAG="v1.2.3", SHA="", GH_NO_RELEASE="1", NOTES_FILE=notes.as_posix(),
+                           TITLE="demo v1.2.3")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        create = next(c for c in self.calls() if c.startswith("gh release create v1.2.3"))
+        self.assertIn('--title demo v1.2.3', create)
+        self.assertEqual(sent.read_text().strip(), "install: .../download/v1.2.3/install.sh")
+
+    def test_the_title_defaults_to_the_tag(self) -> None:
+        res = self.publish(TAG="v1.2.3", SHA="", GH_NO_RELEASE="1")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        create = next(c for c in self.calls() if c.startswith("gh release create v1.2.3"))
+        self.assertIn("--title v1.2.3", create)
+
+    def test_a_title_of_two_lines_is_refused(self) -> None:
+        res = self.publish(TAG="v1.2.3", SHA="", GH_NO_RELEASE="1", TITLE="one\ntwo")
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("title must be one line", res.stderr)
+        self.assertEqual(self.calls(), [])
+
+    def test_the_title_of_a_draft_that_is_there_follows(self) -> None:
+        res = self.publish(TAG="v1.2.3", SHA="", GH_DRAFT="true", TITLE="demo v1.2.3")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        edit = next(c for c in self.calls() if c.startswith("gh release edit v1.2.3"))
+        self.assertIn("--title demo v1.2.3", edit)
+
     def test_a_published_release_is_not_touched(self) -> None:
         res = self.publish(TAG="v1.2.3", SHA="", GH_DRAFT="false")
         self.assertNotEqual(res.returncode, 0)
