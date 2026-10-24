@@ -101,7 +101,7 @@ inputs:
     required: false
     default: ""
   title:
-    description: The title of the release page of a tag (default: the tag). The rolling build names its commit itself.
+    description: The title of the release page of a tag, by default the tag itself. The rolling build names its commit itself.
     required: false
     default: ""
 

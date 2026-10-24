@@ -125,6 +125,44 @@ def values(**over: str) -> dict[str, str]:
     return base
 
 
+class ManifestsTest(unittest.TestCase):
+    """The action manifests are YAML the runner can read. A ': ' in a plain description made `publish` of
+    v0.19.0 unloadable on GitHub, and nothing here had parsed it. PyYAML is on the Linux runner of the CI
+    (required there); elsewhere the test is skipped when it is missing."""
+
+    def yaml(self):
+        try:
+            import yaml
+        except ImportError:
+            if os.environ.get("RUNNER_OS") == "Linux":
+                self.fail("PyYAML is needed on the Linux runner to read the action manifests")
+            self.skipTest("PyYAML is not installed")
+        return yaml
+
+    def test_every_action_manifest_parses(self) -> None:
+        yaml = self.yaml()
+        manifests = sorted(KIT.glob("*/action.yml"))
+        self.assertGreaterEqual(len(manifests), 2)
+        for path in manifests:
+            with self.subTest(action=path.parent.name):
+                doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+                self.assertIsInstance(doc, dict)
+                self.assertEqual(doc["runs"]["using"], "composite")
+                for name, spec in (doc.get("inputs") or {}).items():
+                    self.assertIn("description", spec, f"input {name}")
+
+    def test_every_input_a_manifest_reads_is_declared(self) -> None:
+        import re
+        yaml = self.yaml()
+        for path in sorted(KIT.glob("*/action.yml")):
+            with self.subTest(action=path.parent.name):
+                text = path.read_text(encoding="utf-8")
+                declared = set((yaml.safe_load(text).get("inputs") or {}).keys())
+                used = set(re.findall(r"\$\{\{\s*inputs\.([A-Za-z0-9_-]+)\s*\}\}", text))
+                self.assertEqual(used - declared, set(), "read but not declared")
+                self.assertEqual(declared - used, set(), "declared but never read")
+
+
 class StampTest(unittest.TestCase):
     def test_ps1_gets_every_value_and_nothing_else_changes(self) -> None:
         source = PS1.read_text(encoding="utf-8")
