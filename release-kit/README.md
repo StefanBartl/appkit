@@ -27,6 +27,12 @@ uploading, checking, naming.
 - **`vX.Y.Z`** is a release from a tag, left as a **draft** (NREL-07): a person installs it, opens it,
   and publishes it. A published release is never touched again (NREL-10).
 
+The tag `latest` is moved with the token of the workflow. Should GitHub refuse that (a token may not
+point a ref past a change of `.github/workflows` without the `workflows` right), the run only warns:
+the downloads go by the name of the release, not by the commit of its tag, and the page still names
+the commit of its files. A repository with **immutable releases** turned on cannot have a rolling
+build: its files could never be replaced.
+
 ## The install scripts
 
 Each release carries `install.ps1` (and `install.sh` where there is a Linux or macOS build). The copy
@@ -40,10 +46,12 @@ curl -fsSL https://github.com/OWNER/NAME/releases/download/latest/install.sh | s
 
 Why a script and not only the setup: a file the browser downloads is marked as coming from the
 internet (Mark-of-the-Web), and SmartScreen stops an unsigned setup with that mark; on a managed
-workstation it may not be run at all. A file the script downloads carries no mark. Instead the script
-checks it against `SHA256SUMS` of the same release and runs nothing when it does not match.
-`-ExecutionPolicy Bypass` and `| iex` are needed because a script downloaded by the browser is
-marked as well. Neither helps against AppLocker or WDAC: what those forbid stays forbidden.
+workstation it may not be run at all. A file the script downloads carries no mark. What the script
+checks is that the file is the one `SHA256SUMS` of the same release lists, and it runs nothing when
+it does not match. That proves the file is whole and belongs to that release, not who made the
+release: it is no signature, and it replaces none. `-ExecutionPolicy Bypass` and `| iex` are needed
+because a script downloaded by the browser is marked as well. Neither helps against AppLocker or
+WDAC: what those forbid stays forbidden.
 
 The scripts install **for the current user, without administrator rights**, and refuse an elevated
 session (`-AllowElevated` / `--allow-root` for a build machine): elevated, the app would be installed
@@ -52,8 +60,8 @@ into the profile of the administrator account.
 | Kind | Script | Install step |
 |---|---|---|
 | `hub` | both | The program (bare, or the only thing in a `.zip`/`.tar.gz`) runs `<program> install ARGS`, which copies itself to its fixed place. |
-| `nsis` | `install.ps1` | The NSIS setup runs with `/S`. |
-| `inno` | `install.ps1` | The Inno setup runs with `/VERYSILENT /SUPPRESSMSGBOXES /CURRENTUSER /NORESTART`. |
+| `nsis` | `install.ps1` | The NSIS setup runs with `/S`. It installs for the current user only when the setup is built so (Tauri's default `installMode: "currentUser"`); a per-machine setup asks for administrator rights. |
+| `inno` | `install.ps1` | The Inno setup runs with `/VERYSILENT /SUPPRESSMSGBOXES /CURRENTUSER /NORESTART`. It installs for the current user when the setup has `PrivilegesRequired=lowest` (or allows the override on the command line, `PrivilegesRequiredOverridesAllowed=commandline`). |
 | `appimage` | `install.sh` | The AppImage is copied to `${XDG_BIN_HOME:-~/.local/bin}/<program>`. |
 
 Options of both scripts: another release (`-Version vX.Y.Z` / `--version`), the rolling build
@@ -151,7 +159,10 @@ python3 -m unittest discover -s release-kit -p "test_*.py" -v
 ```
 
 The tests run the install scripts against builds made on the spot (a fake hub and a fake setup that
-write down their arguments), `install.sh` with the `sh` of the system (dash on Linux, Git Bash on
-Windows), `install.ps1` with `pwsh` and Windows PowerShell 5.1, and `publish.sh` against a fake `gh`
-that logs its calls. The CI runs them on Linux and Windows. What they cannot reach is GitHub itself:
-the first run of an app's `rolling.yml` is the test of that.
+write down their arguments), `install.sh` with the `sh` of the system (dash on Linux, the MSYS `sh`
+of Git on Windows), `install.ps1` with `pwsh` and Windows PowerShell 5.1, and `publish.sh` against a
+fake `gh` that logs its calls. The download path runs too: `install.sh` against a fake `curl` and
+`uname` on the PATH, `install.ps1` against functions that stand in for `Invoke-WebRequest` and
+`Invoke-RestMethod` (which URLs, in which channel, what happens without a release or when the API
+fails). The CI runs them on Linux and Windows. What they cannot reach is GitHub itself: the first
+run of an app's `rolling.yml` is the test of that.

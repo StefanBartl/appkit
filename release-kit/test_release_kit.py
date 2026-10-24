@@ -34,11 +34,15 @@ WINDOWS = os.name == "nt"
 
 
 def git_bash(name: str) -> str | None:
-    """A POSIX shell; on Windows the one of Git (the `bash` on PATH may be the WSL launcher)."""
+    """A POSIX shell; on Windows the one of Git (the `bash` on PATH may be the WSL launcher).
+
+    Git/usr/bin, not Git/bin: the launcher in Git/bin puts its own folders before the PATH it is
+    given, and the fake tools of the tests would never be found.
+    """
     if WINDOWS:
         for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramW6432"), r"C:\Program Files"):
             if base:
-                candidate = Path(base) / "Git" / "bin" / f"{name}.exe"
+                candidate = Path(base) / "Git" / "usr" / "bin" / f"{name}.exe"
                 if candidate.is_file():
                     return str(candidate)
         return None
@@ -47,6 +51,53 @@ def git_bash(name: str) -> str | None:
 
 SH_EXE = git_bash("sh")
 BASH_EXE = git_bash("bash")
+
+
+def posix_path_env(*dirs: Path) -> str:
+    """A PATH that puts `dirs` first, as the shell of the system reads it (Git Bash: /c/...)."""
+    if WINDOWS:
+        posix = ["/" + d.as_posix().replace(":", "", 1) for d in dirs]
+        return ":".join(posix + ["/usr/bin", "/bin", os.environ["PATH"]])
+    return os.pathsep.join([str(d) for d in dirs] + [os.environ["PATH"]])
+
+
+def fake_tool(folder: Path, name: str, text: str) -> None:
+    folder.mkdir(exist_ok=True)
+    tool = folder / name
+    tool.write_text(text, encoding="utf-8", newline="\n")
+    tool.chmod(0o755)
+
+
+# curl as install.sh calls it: `-o FILE URL` (and `-w '%{http_code}'` for the API). Files are served
+# by their name from $FIXTURES and every URL is logged; $FAKE_NEWEST is the answer of the API
+# (200 with $FAKE_TAG, 404, or another code).
+FAKE_CURL = r"""#!/bin/sh
+out=""; write=""; url=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    -w) write="$2"; shift 2 ;;
+    --proto|--proto-redir) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+printf '%s\n' "$url" >> "$CURL_LOG"
+case "$url" in
+  */releases/latest)
+    code="${FAKE_NEWEST:-404}"
+    [ "$code" = 200 ] && printf '{"tag_name": "%s"}' "$FAKE_TAG" > "$out"
+    printf '%s' "$code"
+    exit 0 ;;
+esac
+name="${url##*/}"
+[ -f "$FIXTURES/$name" ] || exit 22
+cp "$FIXTURES/$name" "$out"
+"""
+
+FAKE_UNAME = """#!/bin/sh
+case "$1" in -s) echo Linux ;; -m) echo x86_64 ;; *) echo Linux ;; esac
+"""
 POWERSHELLS = [p for p in (shutil.which("pwsh"), shutil.which("powershell")) if p] if WINDOWS else []
 
 
@@ -105,6 +156,9 @@ class StampTest(unittest.TestCase):
             values(channel="v1.0.0", release_asset=""),
             values(rolling_asset="dir/file.exe"),
             values(release_asset="$(evil)"),
+            values(rolling_asset="demo.exe\n"),
+            values(repo="Owner/x\n"),
+            values(channel="latest\n"),
         ):
             with self.subTest(bad=bad), self.assertRaises(stamp.StampError):
                 stamp.stamp(text, ".ps1", bad)
@@ -205,7 +259,93 @@ class InstallShTest(unittest.TestCase):
         self.assertNotEqual(res.returncode, 0)
         self.assertIn("leaves its folder", res.stderr)
         self.assertFalse(self.out.exists())
-        self.assertFalse((self.tmp.parent / "evil").exists())
+
+    def test_a_bare_file_name_runs_that_file_not_one_on_the_path(self) -> None:
+        # An old program of the same name on the PATH must not be what runs after the new one was checked.
+        program = self.tmp / "demo-hub"
+        program.write_text(FAKE_HUB_SH, encoding="utf-8", newline="\n")
+        write_sums(self.tmp, program)
+        old = self.tmp / "old"
+        fake_tool(old, "demo-hub", '#!/bin/sh\nprintf "OLD %s\\n" "$*" > "$OUT"\n')
+        res = subprocess.run(
+            [SH_EXE, SH.as_posix(), "--file", "demo-hub", "--kind", "hub", "--program", "demo-hub", "--allow-root"],
+            capture_output=True, text=True, cwd=self.tmp,
+            env=dict(os.environ, OUT=self.out.as_posix(), PATH=posix_path_env(old)),
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(self.out.read_text().strip(), "install")
+
+    def download(self, script: Path, *args: str, **env: str) -> subprocess.CompletedProcess[str]:
+        tools = self.tmp / "tools"
+        fake_tool(tools, "curl", FAKE_CURL)
+        fake_tool(tools, "uname", FAKE_UNAME)
+        # MSYS=noglob: started from Windows, the MSYS runtime globs its command line ({version} -> version).
+        full = dict(os.environ, OUT=self.out.as_posix(), PATH=posix_path_env(tools), MSYS="noglob",
+                    FIXTURES=(self.tmp / "fixtures").as_posix(), CURL_LOG=(self.tmp / "curl.log").as_posix())
+        full.update(env)
+        return subprocess.run([SH_EXE, script.as_posix(), "--allow-root", *args], capture_output=True, text=True, env=full)
+
+    def fixtures(self, name: str) -> None:
+        folder = self.tmp / "fixtures"
+        folder.mkdir()
+        archive = self.hub_archive()
+        archive.rename(folder / name)
+        write_sums(folder, folder / name)
+
+    def urls(self) -> list[str]:
+        log = self.tmp / "curl.log"
+        return log.read_text().splitlines() if log.exists() else []
+
+    def stamped(self, **over: str) -> Path:
+        script = self.tmp / "install.sh"
+        script.write_text(stamp.stamp(SH.read_text(encoding="utf-8"), ".sh", values(**over)), encoding="utf-8", newline="\n")
+        return script
+
+    def test_the_stamped_release_downloads_its_own_version(self) -> None:
+        self.fixtures("demo-hub-1.2.3-x86_64-unknown-linux-gnu.tar.gz")
+        script = self.stamped(channel="v1.2.3", release_asset="demo-hub-{version}-{triple}.tar.gz")
+        res = self.download(script)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        base = "https://github.com/Owner/app-repo/releases/download/v1.2.3/"
+        self.assertEqual(self.urls(), [base + "demo-hub-1.2.3-x86_64-unknown-linux-gnu.tar.gz", base + "SHA256SUMS"])
+        self.assertEqual(self.out.read_text().strip(), "install")
+
+    def test_the_stamped_rolling_copy_downloads_latest(self) -> None:
+        self.fixtures("demo-hub-linux-x86_64.tar.gz")
+        res = self.download(self.stamped(rolling_asset="demo-hub-linux-x86_64.tar.gz"))
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(self.urls()[0], "https://github.com/Owner/app-repo/releases/download/latest/demo-hub-linux-x86_64.tar.gz")
+
+    def test_no_channel_takes_the_newest_release(self) -> None:
+        self.fixtures("demo-hub-9.9.9-x86_64-unknown-linux-gnu.tar.gz")
+        res = self.download(SH, "--repo", "Owner/app-repo", "--kind", "hub", "--program", "demo-hub",
+                            "--release-asset", "demo-hub-{version}-{triple}.tar.gz", FAKE_NEWEST="200", FAKE_TAG="v9.9.9")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("/download/v9.9.9/demo-hub-9.9.9-x86_64-unknown-linux-gnu.tar.gz", self.urls()[1])
+
+    def test_no_release_at_all_takes_the_rolling_build(self) -> None:
+        self.fixtures("demo-hub-linux-x86_64.tar.gz")
+        res = self.download(SH, "--repo", "Owner/app-repo", "--kind", "hub", "--program", "demo-hub",
+                            "--rolling-asset", "demo-hub-linux-x86_64.tar.gz", FAKE_NEWEST="404")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("/download/latest/demo-hub-linux-x86_64.tar.gz", self.urls()[1])
+
+    def test_an_api_failure_is_not_the_rolling_build(self) -> None:
+        self.fixtures("demo-hub-linux-x86_64.tar.gz")
+        res = self.download(SH, "--repo", "Owner/app-repo", "--kind", "hub", "--program", "demo-hub",
+                            "--rolling-asset", "demo-hub-linux-x86_64.tar.gz", FAKE_NEWEST="403")
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("answered 403", res.stderr)
+        self.assertEqual(len(self.urls()), 1, "nothing is downloaded")
+        self.assertFalse(self.out.exists())
+
+    def test_missing_sums_of_the_rolling_build_say_so(self) -> None:
+        self.fixtures("demo-hub-linux-x86_64.tar.gz")
+        (self.tmp / "fixtures" / "SHA256SUMS").unlink()
+        res = self.download(self.stamped(rolling_asset="demo-hub-linux-x86_64.tar.gz"))
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("a build is running", res.stderr)
+        self.assertFalse(self.out.exists())
 
     def test_appimage_is_copied_and_made_executable(self) -> None:
         image = self.tmp / "demo.AppImage"
@@ -246,11 +386,13 @@ class InstallPs1Test(unittest.TestCase):
         self.out = self.tmp / "out.txt"
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
-    def run_ps(self, shell: str, script: Path, args: str, fake_exit: str = "0") -> subprocess.CompletedProcess[str]:
-        env = dict(os.environ, OUT=str(self.out), FAKE_EXIT=fake_exit)
-        command = f"& '{script}' {args} -AllowElevated"
+    def run_ps(self, shell: str, script: Path, args: str, fake_exit: str = "0", prelude: str = "",
+               cwd: Path | None = None, **env: str) -> subprocess.CompletedProcess[str]:
+        full = dict(os.environ, OUT=str(self.out), FAKE_EXIT=fake_exit)
+        full.update(env)
+        command = f"{prelude}& '{script}' {args} -AllowElevated"
         return subprocess.run([shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                               "-Command", command], capture_output=True, text=True, env=env)
+                               "-Command", command], capture_output=True, text=True, env=full, cwd=cwd)
 
     def fake(self, name: str) -> Path:
         path = self.tmp / name
@@ -325,6 +467,102 @@ class InstallPs1Test(unittest.TestCase):
             self.assertIn("leaves its folder", res.stdout + res.stderr)
             self.assertFalse(self.out.exists())
 
+    def test_a_path_with_a_space_out_of_the_archive_is_refused(self) -> None:
+        archive = self.tmp / "demo-hub.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("demo-hub.cmd", FAKE_CMD)
+            zf.writestr(".. /escaped.txt", "x")
+        write_sums(self.tmp, archive)
+        for shell in self.each_shell():
+            res = self.run_ps(shell, PS1, f"-File '{archive}' -Kind hub -Program demo-hub.cmd")
+            self.assertNotEqual(res.returncode, 0)
+            self.assertFalse(self.out.exists())
+
+    def test_a_bare_file_name_runs_that_file_not_one_on_the_path(self) -> None:
+        self.fake("demo-hub.cmd")
+        write_sums(self.tmp, self.tmp / "demo-hub.cmd")
+        old = self.tmp / "old"
+        old.mkdir()
+        (old / "demo-hub.cmd").write_bytes(b"@echo off\r\necho OLD %*> \"%OUT%\"\r\n")
+        for shell in self.each_shell():
+            res = self.run_ps(shell, PS1, "-File demo-hub.cmd -Kind hub -Program demo-hub.cmd", cwd=self.tmp,
+                              PATH=f"{old}{os.pathsep}{os.environ['PATH']}")
+            self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+            self.assertEqual(self.out_text(), "install")
+
+    # Invoke-WebRequest and Invoke-RestMethod as functions: they win over the cmdlets inside the
+    # script. Files come from $env:FIXTURES by their name; every URL is logged; $env:FAKE_NEWEST is
+    # the answer of the API (200 with $env:FAKE_TAG, or a status code the exception carries).
+    FAKE_WEB = (
+        "function Invoke-WebRequest { param($Uri, $OutFile, [switch] $UseBasicParsing) "
+        "Add-Content -LiteralPath $env:WEB_LOG -Value $Uri; "
+        "$src = Join-Path $env:FIXTURES ($Uri -split '/')[-1]; "
+        "if (-not (Test-Path -LiteralPath $src)) { throw \"404 $Uri\" }; Copy-Item -LiteralPath $src -Destination $OutFile }; "
+        "function Invoke-RestMethod { param($Uri, [switch] $UseBasicParsing) "
+        "Add-Content -LiteralPath $env:WEB_LOG -Value $Uri; "
+        "if ($env:FAKE_NEWEST -eq '200') { return [pscustomobject]@{ tag_name = $env:FAKE_TAG } }; "
+        "$e = New-Object System.Exception ('status ' + $env:FAKE_NEWEST); "
+        "$e | Add-Member -NotePropertyName Response -NotePropertyValue ([pscustomobject]@{ StatusCode = [int] $env:FAKE_NEWEST }); "
+        "throw $e }; "
+    )
+
+    def download(self, shell: str, script: Path, args: str = "", **env: str) -> subprocess.CompletedProcess[str]:
+        log = self.tmp / "web.log"
+        if log.exists():
+            log.unlink()
+        return self.run_ps(shell, script, args, prelude=self.FAKE_WEB, FIXTURES=str(self.tmp / "fixtures"),
+                           WEB_LOG=str(log), **env)
+
+    def urls(self) -> list[str]:
+        log = self.tmp / "web.log"
+        return log.read_text().splitlines() if log.exists() else []
+
+    def fixtures(self, name: str) -> None:
+        folder = self.tmp / "fixtures"
+        folder.mkdir(exist_ok=True)
+        (folder / name).write_bytes(FAKE_CMD.encode())
+        write_sums(folder, folder / name)
+
+    def stamped(self, **over: str) -> Path:
+        script = self.tmp / "install.ps1"
+        script.write_text(stamp.stamp(PS1.read_text(encoding="utf-8"), ".ps1", values(**over)), encoding="utf-8")
+        return script
+
+    def test_the_stamped_release_downloads_its_own_version(self) -> None:
+        self.fixtures("demo-1.2.3-setup.cmd")
+        script = self.stamped(channel="v1.2.3", kind="nsis", program="", release_asset="demo-{version}-setup.cmd")
+        for shell in self.each_shell():
+            res = self.download(shell, script)
+            self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+            base = "https://github.com/Owner/app-repo/releases/download/v1.2.3/"
+            self.assertEqual(self.urls(), [base + "demo-1.2.3-setup.cmd", base + "SHA256SUMS"])
+            self.assertEqual(self.out_text(), "/S")
+
+    def test_no_release_at_all_takes_the_rolling_build(self) -> None:
+        self.fixtures("demo-setup.cmd")
+        args = "-Repo Owner/app-repo -Kind nsis -RollingAsset demo-setup.cmd"
+        for shell in self.each_shell():
+            res = self.download(shell, PS1, args, FAKE_NEWEST="404")
+            self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+            self.assertIn("/download/latest/demo-setup.cmd", self.urls()[1])
+
+    def test_an_api_failure_is_not_the_rolling_build(self) -> None:
+        self.fixtures("demo-setup.cmd")
+        args = "-Repo Owner/app-repo -Kind nsis -RollingAsset demo-setup.cmd"
+        for shell in self.each_shell():
+            res = self.download(shell, PS1, args, FAKE_NEWEST="403")
+            self.assertNotEqual(res.returncode, 0)
+            self.assertEqual(len(self.urls()), 1, "nothing is downloaded")
+            self.assertFalse(self.out.exists())
+
+    def test_no_channel_takes_the_newest_release(self) -> None:
+        self.fixtures("demo-9.9.9-setup.cmd")
+        args = "-Repo Owner/app-repo -Kind nsis -ReleaseAsset 'demo-{version}-setup.cmd'"
+        for shell in self.each_shell():
+            res = self.download(shell, PS1, args, FAKE_NEWEST="200", FAKE_TAG="v9.9.9")
+            self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+            self.assertIn("/download/v9.9.9/demo-9.9.9-setup.cmd", self.urls()[1])
+
     def test_an_unstamped_copy_wants_its_kind(self) -> None:
         setup = self.fake("demo-setup.cmd")
         write_sums(self.tmp, setup)
@@ -349,20 +587,26 @@ class InstallPs1Test(unittest.TestCase):
         # preference must stay inside, and a failure must not end the session.
         for shell in self.each_shell():
             command = (
+                "$File = 'mine'; $Version = 'mine'; $Kind = 'mine'; "
                 f"try {{ Get-Content -Raw '{PS1}' | Invoke-Expression }} catch {{ 'caught: ' + $_ }}; "
-                "'after: ' + $ErrorActionPreference"
+                "'after: ' + $ErrorActionPreference + ' ' + $File + ' ' + $Version + ' ' + $Kind"
             )
             res = subprocess.run([shell, "-NoProfile", "-NonInteractive", "-Command", command],
                                  capture_output=True, text=True)
             self.assertIn("caught: install.ps1:", res.stdout, res.stderr)
-            self.assertIn("after: Continue", res.stdout)
+            self.assertIn("after: Continue mine mine mine", res.stdout)
 
 
 FAKE_GH = r"""#!/usr/bin/env bash
 printf '%s\n' "gh $*" >> "$GH_LOG"
+if [ "$1" = "api" ] && [ -n "${GH_FAIL_PATCH:-}" ]; then
+  echo "refusing to allow a GitHub App to create or update workflow" >&2; exit 1
+fi
 case "$1 $2" in
+  "release create") : > "$GH_LOG.created" ;;
   "release view")
-    if [ -n "${GH_NO_RELEASE:-}" ]; then exit 1; fi
+    # No release until one is made.
+    if [ -n "${GH_NO_RELEASE:-}" ] && [ ! -e "$GH_LOG.created" ]; then exit 1; fi
     case " $* " in
       *" isDraft "*) printf '%s\n' "${GH_DRAFT:-true}" ;;
       *" assets "*) printf '%s\n' ${GH_ASSETS:-} ;;
@@ -441,6 +685,19 @@ class PublishTest(unittest.TestCase):
         self.assertIn("install.sh", calls[upload])
         self.assertIn("SHA256SUMS", res.stdout + "".join(calls))
         self.assertIn("install.ps1", res.stdout)
+
+    def test_the_first_rolling_build_makes_the_pre_release(self) -> None:
+        res = self.publish(GH_NO_RELEASE="1")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        create = next(c for c in self.calls() if c.startswith("gh release create latest"))
+        for flag in ("--prerelease", "--latest=false", "--target " + "a" * 40):
+            self.assertIn(flag, create)
+
+    def test_a_tag_that_cannot_move_still_names_the_commit(self) -> None:
+        res = self.publish(GH_FAIL_PATCH="1")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("::warning::", res.stderr)
+        self.assertTrue(any(c.startswith("gh release edit latest") and "aaaaaaa" in c for c in self.calls()))
 
     def test_a_missing_system_publishes_nothing(self) -> None:
         (self.dist / "demo-hub-linux-x86_64.tar.gz").unlink()

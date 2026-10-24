@@ -111,7 +111,8 @@ if [ "$TAG" = "latest" ]; then
     gh release delete-asset latest SHA256SUMS --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
     (cd "$stage" && gh release upload latest "${names[@]}" --repo "$GITHUB_REPOSITORY" --clobber)
     # A file of an earlier build that this one no longer has (a renamed asset) would be offered
-    # without a checksum: it goes.
+    # without a checksum: it goes. (The list first, so a failing `gh` stops here.)
+    present="$(gh release view latest --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
     while IFS= read -r old; do
         [ -n "$old" ] || continue
         [ "$old" = "SHA256SUMS" ] && continue
@@ -119,12 +120,16 @@ if [ "$TAG" = "latest" ]; then
             say "removing $old (not part of this build)"
             gh release delete-asset latest "$old" --repo "$GITHUB_REPOSITORY" --yes
         fi
-    done < <(gh release view latest --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+    done <<< "$present"
     cp "$stage.sums" "$stage/SHA256SUMS"
     (cd "$stage" && gh release upload latest SHA256SUMS --repo "$GITHUB_REPOSITORY" --clobber)
 
-    # The words of the page, last: only now does it name this commit.
-    gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/latest" -f sha="$SHA" -F force=true >/dev/null
+    # The words of the page, last: only now does it name this commit. The downloads go by the name
+    # of the release, not by the commit of its tag; when the tag cannot move (a token without the
+    # right to point a ref past a change of .github/workflows), the page still names the commit.
+    if ! gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/latest" -f sha="$SHA" -F force=true >/dev/null; then
+        printf '::warning::release-kit publish: the tag latest could not be moved to %s; the files and the page are of this commit\n' "$SHA" >&2
+    fi
     {
         notes
         printf '\nBuilt from commit `%s`.\n' "$SHA"

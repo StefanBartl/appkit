@@ -54,19 +54,19 @@ class StampError(Exception):
 def check(values: dict[str, str], suffix: str) -> None:
     """Refuse a value that is not what its field may hold."""
     for name, value in values.items():
-        if not PLAIN.match(value):
+        if not PLAIN.fullmatch(value):
             raise StampError(f"--{name.replace('_', '-')} has a character that is not allowed: {value!r}")
-    if not REPO.match(values["repo"]):
+    if not REPO.fullmatch(values["repo"]):
         raise StampError("--repo must be OWNER/NAME")
-    if not CHANNEL.match(values["channel"]):
+    if not CHANNEL.fullmatch(values["channel"]):
         raise StampError("--channel must be latest or vX.Y.Z")
-    if not WORD.match(values["app"]):
+    if not WORD.fullmatch(values["app"]):
         raise StampError("--app must be a plain word")
     if values["kind"] not in KINDS[suffix]:
         raise StampError(f"--kind of a {suffix} script is one of {', '.join(KINDS[suffix])}")
     # A hub archive and an AppImage need the name of the program; a setup names itself.
     needs_program = values["kind"] in ("hub", "appimage")
-    if (needs_program or values["program"]) and not WORD.match(values["program"]):
+    if (needs_program or values["program"]) and not WORD.fullmatch(values["program"]):
         raise StampError("--program must be a plain file name")
     asset = values["rolling_asset"] if values["channel"] == "latest" else values["release_asset"]
     if asset == "":

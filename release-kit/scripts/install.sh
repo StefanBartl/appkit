@@ -62,7 +62,12 @@ fail() {
 }
 
 usage() {
-    sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+    # Piped into sh there is no file to read the header from.
+    if [ -f "$0" ] && head -n 2 "$0" | grep -q 'release-kit'; then
+        sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+    else
+        say "install.sh of release-kit: https://github.com/StefanBartl/appkit/tree/main/release-kit"
+    fi
 }
 
 need_value() {
@@ -112,12 +117,28 @@ fi
 
 fetch() {
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --proto '=https' -o "$2" "$1"
+        curl -fsSL --proto '=https' --proto-redir '=https' -o "$2" "$1"
     elif command -v wget >/dev/null 2>&1; then
-        wget -q -O "$2" "$1"
+        wget -q --https-only -O "$2" "$1"
     else
         fail "need curl or wget to download"
     fi
+}
+
+# The tag of the newest published release; empty when the repository has none (404). Any other
+# failure (no network, a rate limit) stops: it must not quietly turn into the rolling build.
+newest_tag() {
+    if command -v curl >/dev/null 2>&1; then
+        code="$(curl -sSL --proto '=https' --proto-redir '=https' -o "$WORK/newest.json" -w '%{http_code}' "$1")" ||
+            fail "cannot ask GitHub for the newest release of $REPO"
+    else
+        fail "need curl to ask GitHub for the newest release (or give --version TAG or --rolling)"
+    fi
+    case "$code" in
+        200) sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$WORK/newest.json" | head -n 1 ;;
+        404) ;;
+        *) fail "GitHub answered $code for the newest release of $REPO (try again later, or give --version TAG)" ;;
+    esac
 }
 
 sha256_of() {
@@ -148,11 +169,9 @@ if [ -z "$FILE" ]; then
     # release (and the rolling build when there is none yet).
     if [ -z "$CHANNEL" ]; then
         say "looking for the newest release of $REPO"
-        if fetch "https://api.github.com/repos/$REPO/releases/latest" "$WORK/newest.json" 2>/dev/null; then
-            CHANNEL="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$WORK/newest.json" | head -n 1)"
-        fi
+        CHANNEL="$(newest_tag "https://api.github.com/repos/$REPO/releases/latest")"
         if [ -z "$CHANNEL" ]; then
-            say "no published release found: taking the rolling build of main"
+            say "no published release yet: taking the rolling build of main"
             CHANNEL="latest"
         fi
     fi
@@ -177,6 +196,11 @@ if [ -z "$FILE" ]; then
     SUMS="$WORK/SHA256SUMS"
 else
     [ -f "$FILE" ] || fail "no such file: $FILE"
+    # An absolute path: a bare name would be checked here but run from the PATH (an old install).
+    case "$FILE" in
+        /* | [A-Za-z]:/* | [A-Za-z]:\\*) ;;
+        *) FILE="$PWD/$FILE" ;;
+    esac
 fi
 
 # The checksum: never skipped. A file you have already needs one of the three sources.
