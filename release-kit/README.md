@@ -151,8 +151,9 @@ the stamped script of a release still offers `-Rolling`, and the other way round
 
 `{version}` (the tag without its `v`, release assets only) and `{triple}` (`x86_64-pc-windows-msvc`,
 `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`) are filled in by the script on the user's
-machine. A `unix-rolling-asset` without `{triple}` is a build for Linux x86-64: `install.sh` of the
-rolling build stops on any other system instead of downloading a file that would not run there.
+machine. A `unix-release-asset` or `unix-rolling-asset` without `{triple}` (an AppImage has none) is a
+build for Linux x86-64: `install.sh` stops on any other system, in either channel, instead of
+downloading a file that would not run there.
 `extra` attaches more files of the repository (an `uninstall.ps1`), checked like the rest.
 
 ## Checks

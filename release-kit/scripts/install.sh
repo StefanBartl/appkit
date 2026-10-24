@@ -182,19 +182,21 @@ if [ -z "$FILE" ]; then
     # A tag is a plain word: it goes into a URL and a file name.
     plain "$CHANNEL" || fail "the version has a character that is not allowed: $CHANNEL"
     if [ "$CHANNEL" = "latest" ]; then
-        # A rolling build is made for Linux x86-64 unless its name says the system ({triple}): on
-        # another system its file would download, pass its checksum and then not run.
-        case "$ROLLING_ASSET" in
-            *"{triple}"*) NAME="$(printf '%s' "$ROLLING_ASSET" | sed -e "s/{triple}/$TRIPLE/g")" ;;
-            *)
-                [ "$TRIPLE" = "x86_64-unknown-linux-gnu" ] ||
-                    fail "the rolling build is for Linux x86-64 only, not for $TRIPLE (take a release: --version TAG)"
-                NAME="$ROLLING_ASSET"
-                ;;
-        esac
+        PATTERN="$ROLLING_ASSET"
     else
-        NAME="$(printf '%s' "$RELEASE_ASSET" | sed -e "s/{version}/${CHANNEL#v}/g" -e "s/{triple}/$TRIPLE/g")"
+        PATTERN="$RELEASE_ASSET"
     fi
+    # A build is made for Linux x86-64 unless its name says the system ({triple}), in the rolling
+    # build and in a release alike (an AppImage has none): on another system its file would
+    # download, pass its checksum and then not run.
+    case "$PATTERN" in
+        "" | *"{triple}"*) ;;
+        *)
+            [ "$TRIPLE" = "x86_64-unknown-linux-gnu" ] ||
+                fail "the build of this channel ($CHANNEL) is for Linux x86-64 only, not for $TRIPLE"
+            ;;
+    esac
+    NAME="$(printf '%s' "$PATTERN" | sed -e "s/{version}/${CHANNEL#v}/g" -e "s/{triple}/$TRIPLE/g")"
     [ -n "$NAME" ] || fail "the channel $CHANNEL has no build for this system"
     plain "$NAME" || fail "the file name is not a plain word: $NAME"
 

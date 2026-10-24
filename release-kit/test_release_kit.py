@@ -324,6 +324,25 @@ class InstallShTest(unittest.TestCase):
         self.assertIn("for Linux x86-64 only", res.stderr)
         self.assertEqual(self.urls(), [], "nothing is downloaded")
 
+    def test_the_release_of_linux_is_not_installed_on_a_mac_either(self) -> None:
+        # An AppImage has no system in its name: on a Mac it would download, pass its checksum and not run.
+        self.fixtures("demo_1.2.3_amd64.AppImage")
+        script = self.stamped(channel="v1.2.3", kind="appimage", program="demo",
+                              release_asset="demo_{version}_amd64.AppImage")
+        res = self.download(script, FAKE_SYSTEM="Darwin", FAKE_MACHINE="arm64")
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("for Linux x86-64 only", res.stderr)
+        self.assertEqual(self.urls(), [], "nothing is downloaded")
+
+    def test_an_appimage_release_installs_on_linux(self) -> None:
+        self.fixtures("demo_1.2.3_amd64.AppImage")
+        bin_dir = self.tmp / "bin"
+        script = self.stamped(channel="v1.2.3", kind="appimage", program="demo",
+                              release_asset="demo_{version}_amd64.AppImage")
+        res = self.download(script, XDG_BIN_HOME=bin_dir.as_posix())
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertTrue((bin_dir / "demo").is_file())
+
     def test_a_rolling_build_named_by_its_system(self) -> None:
         self.fixtures("demo-hub-aarch64-apple-darwin.tar.gz")
         res = self.download(self.stamped(rolling_asset="demo-hub-{triple}.tar.gz"),
