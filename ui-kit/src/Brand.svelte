@@ -40,7 +40,7 @@
     color: var(--text);
     background: none;
     border: 0;
-    padding: 0.1rem 0.15rem;
+    padding: 0;
     border-radius: var(--radius);
   }
   .kit-brand-link {
@@ -49,8 +49,8 @@
   .kit-brand-link::after {
     content: '';
     position: absolute;
-    left: 0.15rem;
-    right: 0.15rem;
+    left: 0;
+    right: 0;
     bottom: -0.05rem;
     height: 2px;
     border-radius: var(--radius-pill);

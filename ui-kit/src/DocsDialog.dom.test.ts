@@ -40,6 +40,13 @@ const article = () => document.querySelector('article.doc')!.textContent ?? '';
 const names = () => [...document.querySelectorAll('li button .name')].map((n) => n.textContent);
 
 describe('DocsDialog', () => {
+  it('holds nothing of the documents while it is shut (a page that searches its text must not find them)', async () => {
+    app = mount(DocsDialog, { target: document.body, props: { open: false, docs, docId: null, onclose: vi.fn(), labels } });
+    flushSync();
+    await tick();
+    expect(document.querySelector('dialog')?.textContent?.trim()).toBe('');
+  });
+
   it('starts at the document the app names, else at the first', async () => {
     await show('b');
     expect(article()).toContain('The engine and the hub.');

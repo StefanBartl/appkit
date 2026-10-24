@@ -64,36 +64,39 @@
     if (!dialog?.open) onclose();
   }}
 >
-  <header>
-    <h2>{labels.title}</h2>
-    <button type="button" class="close" aria-label={labels.close} onclick={() => dialog?.close()}>×</button>
-  </header>
-  <input
-    bind:this={input}
-    type="search"
-    aria-label={labels.label}
-    autocomplete="off"
-    spellcheck="false"
-    placeholder={labels.placeholder}
-    bind:value={query}
-  />
-  <div class="body">
-    <ul aria-label={labels.list}>
-      {#each hits as hit (hit.doc.id)}
-        <li>
-          <button type="button" class:chosen={hit.doc.id === current?.id} aria-current={hit.doc.id === current?.id} onclick={() => (chosen = hit.doc.id)}>
-            <span class="name">{hit.doc.title}</span>
-            {#if hit.snippet}<span class="snippet">{hit.snippet}</span>{/if}
-          </button>
-        </li>
-      {:else}
-        <li class="none">{labels.none}</li>
-      {/each}
-    </ul>
-    <article class="doc">
-      {#if current}<Blocks {blocks} />{/if}
-    </article>
-  </div>
+  <!-- Nothing of the documents is read or drawn while the window is shut. -->
+  {#if open}
+    <header>
+      <h2>{labels.title}</h2>
+      <button type="button" class="close" aria-label={labels.close} onclick={() => dialog?.close()}>×</button>
+    </header>
+    <input
+      bind:this={input}
+      type="search"
+      aria-label={labels.label}
+      autocomplete="off"
+      spellcheck="false"
+      placeholder={labels.placeholder}
+      bind:value={query}
+    />
+    <div class="body">
+      <ul aria-label={labels.list}>
+        {#each hits as hit (hit.doc.id)}
+          <li>
+            <button type="button" class:chosen={hit.doc.id === current?.id} aria-current={hit.doc.id === current?.id} onclick={() => (chosen = hit.doc.id)}>
+              <span class="name">{hit.doc.title}</span>
+              {#if hit.snippet}<span class="snippet">{hit.snippet}</span>{/if}
+            </button>
+          </li>
+        {:else}
+          <li class="none">{labels.none}</li>
+        {/each}
+      </ul>
+      <article class="doc">
+        {#if current}<Blocks {blocks} />{/if}
+      </article>
+    </div>
+  {/if}
 </dialog>
 
 <style>
