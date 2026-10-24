@@ -57,6 +57,23 @@ jobs:
       - run: python3 tools/check-control-chars.py
       - run: python3 tools/check-color-literals.py --root ui-kit/src --tokens ui-kit/src/tokens.css
 
+  # The release kit (release-kit): stamping, install.sh with dash and Git Bash, install.ps1 with pwsh and
+  # Windows PowerShell 5.1 against fake builds, publish.sh against a fake gh.
+  release-kit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 (node24)
+        with:
+          persist-credentials: false
+      - shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then py=python; else py=python3; fi
+          "$py" -m unittest discover -s release-kit -p "test_*.py" -v
+
   # The browser parts of the kit (ui-kit): source only, checked and tested here; the apps bundle it.
   ui-kit:
     runs-on: ubuntu-latest

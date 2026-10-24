@@ -1,0 +1,76 @@
+# release-kit/prepare: is this commit worth a rolling build?
+#
+# Only the tip of the default branch is built: a CI run of an older commit (finished late, or run
+# again by hand) does not move `latest` backwards. When it is the tip and the pre-release `latest`
+# does not exist yet, it is made once (at this commit, marked "starting"); its files and, last, its
+# words are changed by release-kit/publish.
+#
+# Used in the job that decides, with `contents: write` and the commit of the CI run:
+#
+#   - id: prepare
+#     uses: StefanBartl/appkit/release-kit/prepare@<sha> # vX.Y.Z
+#     with:
+#       sha: ${{ github.event.workflow_run.head_sha }}
+#       token: ${{ github.token }}
+#
+# The job hands `steps.prepare.outputs.current` (and `sha`, `short`) on to the build jobs.
+
+name: release-kit prepare
+description: Decide whether a commit gets a rolling build, and make the pre-release `latest` once.
+
+inputs:
+  sha:
+    description: The commit the CI run was about.
+    required: true
+  token:
+    description: A token with contents write (github.token).
+    required: true
+  branch:
+    description: The branch whose tip is built.
+    required: false
+    default: main
+
+outputs:
+  current:
+    description: "'true' when the commit is the tip of the branch."
+    value: ${{ steps.facts.outputs.current }}
+  sha:
+    description: The commit.
+    value: ${{ steps.facts.outputs.sha }}
+  short:
+    description: The first seven characters of the commit.
+    value: ${{ steps.facts.outputs.short }}
+
+runs:
+  using: composite
+  steps:
+    - name: Is this the tip of the branch, and does the pre-release exist
+      id: facts
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        SHA: ${{ inputs.sha }}
+        BRANCH: ${{ inputs.branch }}
+      run: |
+        set -eu
+        case "$SHA" in
+          *[!0-9a-f]* | "") echo "::error::sha must be a full commit id, got '$SHA'"; exit 1 ;;
+        esac
+        if [ "${#SHA}" -ne 40 ]; then
+          echo "::error::sha must be a full commit id, got '$SHA'"
+          exit 1
+        fi
+        short="$(printf '%s' "$SHA" | cut -c1-7)"
+        tip="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq .object.sha)"
+        echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+        echo "short=$short" >> "$GITHUB_OUTPUT"
+        if [ "$tip" != "$SHA" ]; then
+          echo "current=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::$short is not the tip of $BRANCH ($tip): nothing is built for it"
+          exit 0
+        fi
+        echo "current=true" >> "$GITHUB_OUTPUT"
+        if ! gh release view latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          gh release create latest --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --target "$SHA" \
+            --title "Rolling build (starting)" --notes "The first rolling build is being made."
+        fi

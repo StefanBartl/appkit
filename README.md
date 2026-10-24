@@ -16,6 +16,7 @@ and the same tests. It knows no app: an app brings its names, its routes and its
 | `appkit-hub` | The hub without the app: the guard (eight steps, in a fixed order), pairing, the page, `hello`, the list of vaults, the accept loop, the seam of the engine (one process per call, or a persistent host), the snapshot store, the file watcher, the full-text search, the settings file, the search for Neovim and the engine, installing, autostart and the first-start questions. |
 | `appkit-testkit` | The security matrix every app's hub must pass, a second minimal app (`Demo`) that proves the guard knows no app, and a fake engine to test without Neovim. |
 | `ui-kit` (`appkit-ui`) | The browser side, Svelte 5 and TypeScript source: the design tokens and base rules, the menu bar, the multi-select, the info button, the markdown reader, the hint popup, the event-stream reader, the pairing code and the hidden-character guard. See [ui-kit/README.md](ui-kit/README.md). |
+| `release-kit` | How an app is published: GitHub Actions for the rolling build `latest` and the release drafts, and the install scripts (`install.ps1`, `install.sh`) every release carries, stamped with its channel. Any native app can use it, also one without the crates. See [release-kit/README.md](release-kit/README.md). |
 
 ## Using it
 
@@ -62,6 +63,7 @@ cargo test --workspace --locked
 cargo deny check
 cargo audit
 python3 tools/check-lock-age.py --min-days 7
+python3 -m unittest discover -s release-kit -p "test_*.py"
 ```
 
 The CI runs them on Linux and Windows. See [SECURITY.md](SECURITY.md) for what the hub protects

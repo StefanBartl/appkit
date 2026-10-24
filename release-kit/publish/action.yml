@@ -1,0 +1,126 @@
+# release-kit/publish: put the built files, the stamped install scripts and SHA256SUMS on a release.
+#
+# Runs on a Linux runner (bash, python3, gh, sha256sum), after the build jobs have uploaded their
+# files as artifacts and the job has downloaded them into one folder:
+#
+#   publish:
+#     needs: [prepare, build]
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: write
+#     steps:
+#       - uses: actions/checkout@<sha>            # only for notes-file and extra files
+#         with: { persist-credentials: false }
+#       - uses: actions/download-artifact@<sha>
+#         with: { pattern: rolling-*, path: dist, merge-multiple: true }
+#       - uses: StefanBartl/appkit/release-kit/publish@<sha> # vX.Y.Z
+#         with:
+#           token: ${{ github.token }}
+#           tag: latest                            # or ${{ github.ref_name }} for a release
+#           sha: ${{ needs.prepare.outputs.sha }}
+#           files: dist
+#           expect: 2
+#           app: tasks-desktop
+#           windows-kind: hub
+#           windows-program: tasks-hub.exe
+#           windows-release-asset: tasks-hub-{version}-{triple}.zip
+#           windows-rolling-asset: tasks-hub-windows-x86_64.exe
+#           unix-kind: hub
+#           unix-program: tasks-hub
+#           unix-release-asset: tasks-hub-{version}-{triple}.tar.gz
+#           unix-rolling-asset: tasks-hub-linux-x86_64.tar.gz
+#           extra: |
+#             scripts/uninstall.ps1
+#             scripts/uninstall.sh
+#           notes-file: .github/rolling-notes.md
+#
+# What it does, in order: release-kit/publish.sh.
+
+name: release-kit publish
+description: Attach built files, stamped install scripts and SHA256SUMS to the rolling build or a release draft.
+
+inputs:
+  token:
+    description: A token with contents write (github.token).
+    required: true
+  tag:
+    description: latest (the rolling build) or vX.Y.Z (a release, left as a draft).
+    required: true
+  sha:
+    description: The commit of the rolling build (needed for latest).
+    required: false
+    default: ""
+  files:
+    description: The folder that holds the built files (and nothing else).
+    required: true
+  expect:
+    description: How many built files there must be.
+    required: true
+  app:
+    description: The name of the app (a plain word; the folder of the install scripts' downloads).
+    required: true
+  windows-kind:
+    description: hub, nsis or inno; empty for no install.ps1.
+    required: false
+    default: ""
+  windows-program:
+    description: The program in a hub archive (tasks-hub.exe); for a setup its name is free.
+    required: false
+    default: ""
+  windows-release-asset:
+    description: The Windows file of a release; {version} and {triple} are filled in.
+    required: false
+    default: ""
+  windows-rolling-asset:
+    description: The Windows file of the rolling build.
+    required: false
+    default: ""
+  unix-kind:
+    description: hub or appimage; empty for no install.sh.
+    required: false
+    default: ""
+  unix-program:
+    description: The program in a hub archive, or the name of the installed AppImage.
+    required: false
+    default: ""
+  unix-release-asset:
+    description: The Linux/macOS file of a release; {version} and {triple} are filled in.
+    required: false
+    default: ""
+  unix-rolling-asset:
+    description: The Linux file of the rolling build.
+    required: false
+    default: ""
+  extra:
+    description: More files of the repository to attach and check (one path per line).
+    required: false
+    default: ""
+  notes-file:
+    description: The words of the release page (the rolling build adds the commit below them).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Publish
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        KIT: ${{ github.action_path }}/..
+        TAG: ${{ inputs.tag }}
+        SHA: ${{ inputs.sha }}
+        FILES: ${{ inputs.files }}
+        EXPECT: ${{ inputs.expect }}
+        APP: ${{ inputs.app }}
+        WINDOWS_KIND: ${{ inputs.windows-kind }}
+        WINDOWS_PROGRAM: ${{ inputs.windows-program }}
+        WINDOWS_RELEASE_ASSET: ${{ inputs.windows-release-asset }}
+        WINDOWS_ROLLING_ASSET: ${{ inputs.windows-rolling-asset }}
+        UNIX_KIND: ${{ inputs.unix-kind }}
+        UNIX_PROGRAM: ${{ inputs.unix-program }}
+        UNIX_RELEASE_ASSET: ${{ inputs.unix-release-asset }}
+        UNIX_ROLLING_ASSET: ${{ inputs.unix-rolling-asset }}
+        EXTRA: ${{ inputs.extra }}
+        NOTES_FILE: ${{ inputs.notes-file }}
+      run: bash "$KIT/publish.sh"
