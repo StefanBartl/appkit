@@ -30,6 +30,8 @@
 
   let shown = $state<{ x: number; y: number; items: MenuItem[]; back: HTMLElement | null } | null>(null);
   let menu: HTMLElement | undefined = $state();
+  // A list longer than the window scrolls inside itself; a scroll box needs a way in for the keyboard (WCAG 2.1.1).
+  let scrolls = $state(false);
   const uid = $props.id();
   let typed = '';
   let typedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -54,6 +56,7 @@
       shown = shown && { ...shown, x: place.x, y: place.y };
     }
     await tick();
+    scrolls = !!menu && menu.scrollHeight > menu.clientHeight;
     buttons()[0]?.focus();
     return true;
   }
@@ -189,6 +192,7 @@
     role="menu"
     aria-label={label}
     bind:this={menu}
+    tabindex={scrolls ? 0 : undefined}
     style:left="{shown.x}px"
     style:top="{shown.y}px"
   >

@@ -13,7 +13,7 @@ const chosen = vi.fn();
 
 beforeEach(() => {
   document.body.innerHTML = `
-    <section id="view"><button id="card">Card</button><input id="field" /></section>
+    <section id="view"><button id="card">Card</button><input id="field" /><select id="pick"><option>a</option></select><input id="box" type="checkbox" /></section>
     <p id="plain">plain</p>`;
   const view = document.getElementById('view') as HTMLElement;
   const card = document.getElementById('card') as HTMLElement;
@@ -107,6 +107,13 @@ describe('ContextMenu', () => {
     await settle();
     expect(menu()).toBeNull();
     expect(document.activeElement).toBe(card);
+  });
+
+  it('opens on a choice and a checkbox (they have no text menu), not on a text field', async () => {
+    expect(rightClick(document.getElementById('pick')!).defaultPrevented).toBe(true);
+    await settle();
+    expect(rightClick(document.getElementById('box')!).defaultPrevented).toBe(true);
+    expect(rightClick(document.getElementById('field')!).defaultPrevented).toBe(false);
   });
 
   it('opens with the context key and with Shift+F10 on the focused target', async () => {

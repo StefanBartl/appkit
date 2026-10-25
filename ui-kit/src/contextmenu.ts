@@ -136,9 +136,17 @@ export function targetChain(from: Element | null): { chain: ContextTarget[]; ele
   return { chain, element };
 }
 
-/** A field the browser's own menu belongs to (cut, copy, paste): the kit leaves it alone. */
+/**
+ * A field the browser's own menu belongs to (cut, copy, paste): the kit leaves a text field alone. A choice, a checkbox
+ * and a button have no such menu, so an element around them can be a target.
+ */
 export function isEditable(el: Element | null): boolean {
-  return el?.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]') != null;
+  const field = el?.closest('input, textarea, [contenteditable=""], [contenteditable="true"]');
+  if (!field) return false;
+  if (field instanceof HTMLInputElement) {
+    return !['button', 'checkbox', 'radio', 'submit', 'reset', 'image', 'file', 'range', 'color'].includes(field.type);
+  }
+  return true;
 }
 
 /**
