@@ -85,6 +85,13 @@ describe('ContextMenu', () => {
     expect(menu()).toBeNull();
   });
 
+  it('goes to the entry that a typed letter names', async () => {
+    rightClick(document.getElementById('card')!);
+    await settle();
+    key('c');
+    expect(document.activeElement?.textContent).toContain('Compact');
+  });
+
   it('hands the target to the entry that was chosen', async () => {
     rightClick(document.getElementById('card')!);
     await settle();
@@ -113,6 +120,17 @@ describe('ContextMenu', () => {
     card.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }));
     await settle();
     expect(menu()).not.toBeNull();
+  });
+
+  it('an element without a target (a component that is one only sometimes) is none', async () => {
+    const el = document.getElementById('plain') as HTMLElement;
+    const action = contextTarget(el, undefined);
+    expect(rightClick(el).defaultPrevented).toBe(false);
+    action.update({ kind: 'tile', id: 'x' });
+    expect(rightClick(el).defaultPrevented).toBe(true);
+    await settle();
+    action.update(undefined);
+    expect(rightClick(el).defaultPrevented).toBe(false);
   });
 
   it('closes on a press beside it', async () => {

@@ -105,12 +105,16 @@ export function buildContextMenu(
 
 const targets = new WeakMap<Element, ContextTarget>();
 
-/** `use:contextTarget={{ kind: 'task', id }}`: this element is a target for the context menu. */
-export function contextTarget(node: HTMLElement, target: ContextTarget) {
-  targets.set(node, target);
+/**
+ * `use:contextTarget={{ kind: 'task', id }}`: this element is a target for the context menu. Without a target (a
+ * component that is a target only sometimes) the element is none.
+ */
+export function contextTarget(node: HTMLElement, target?: ContextTarget) {
+  const set = (t: ContextTarget | undefined) => (t ? targets.set(node, t) : targets.delete(node));
+  set(target);
   return {
-    update(next: ContextTarget) {
-      targets.set(node, next);
+    update(next?: ContextTarget) {
+      set(next);
     },
     destroy() {
       targets.delete(node);

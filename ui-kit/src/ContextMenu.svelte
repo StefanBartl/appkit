@@ -5,7 +5,7 @@
   // Keys: Up, Down, Home and End walk the entries, Enter and Space choose, Escape closes and gives the focus back to the
   // element the menu was opened on. A click beside it, a scroll and a resize close it.
   import { tick } from 'svelte';
-  import { ariaShortcut, toBlocks, type MenuItem } from './menu';
+  import { ariaShortcut, toBlocks, TYPE_AHEAD_MS, typeAheadIndex, type MenuItem } from './menu';
   import {
     buildContextMenu,
     isEditable,
@@ -31,6 +31,8 @@
   let shown = $state<{ x: number; y: number; items: MenuItem[]; back: HTMLElement | null } | null>(null);
   let menu: HTMLElement | undefined = $state();
   const uid = $props.id();
+  let typed = '';
+  let typedTimer: ReturnType<typeof setTimeout> | undefined;
 
   const roleOf = (item: MenuItem): string =>
     item.kind === 'radio' ? 'menuitemradio' : item.kind === 'check' ? 'menuitemcheckbox' : 'menuitem';
@@ -116,6 +118,20 @@
       list[event.key === 'Home' ? 0 : list.length - 1]?.focus();
     } else if (event.key === 'Tab') {
       close(false);
+    } else if ([...event.key].length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && event.key !== ' ') {
+      // A typed letter goes to the next entry that starts with it (a word, to the one it names).
+      clearTimeout(typedTimer);
+      typed += event.key;
+      typedTimer = setTimeout(() => (typed = ''), TYPE_AHEAD_MS);
+      const to = typeAheadIndex(
+        list.map((b) => b.textContent?.replace(/^[●✓\s]+/, '').trim() ?? ''),
+        at,
+        typed,
+      );
+      if (to >= 0) {
+        event.preventDefault();
+        list[to]?.focus();
+      }
     }
   }
 
