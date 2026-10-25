@@ -115,6 +115,19 @@ export {
   type DocHit,
   type HelpOptions,
 } from './docs';
+export {
+  buildContextMenu,
+  contextTarget,
+  ContextRegistry,
+  isEditable,
+  placeMenu,
+  targetChain,
+  type ContextEntry,
+  type ContextEnv,
+  type ContextItem,
+  type ContextProvider,
+  type ContextTarget,
+} from './contextmenu';
 export { closeOnBackdrop, isOutside, type BackdropOptions, type Rect } from './backdrop';
 export { hasHidden, markHidden } from './text';
 export {

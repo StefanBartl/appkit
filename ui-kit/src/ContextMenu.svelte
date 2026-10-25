@@ -1,0 +1,275 @@
+<script lang="ts">
+  // The context menu of an app: one component for the whole page. A right click, the context key and Shift+F10 open it
+  // on the targets around the pointer or the focus (`use:contextTarget`); what it offers is what the providers of those
+  // targets say (`contextmenu.ts`). The browser's own menu stays where nobody offers anything, and in text fields.
+  // Keys: Up, Down, Home and End walk the entries, Enter and Space choose, Escape closes and gives the focus back to the
+  // element the menu was opened on. A click beside it, a scroll and a resize close it.
+  import { tick } from 'svelte';
+  import { ariaShortcut, toBlocks, type MenuItem } from './menu';
+  import {
+    buildContextMenu,
+    isEditable,
+    placeMenu,
+    targetChain,
+    type ContextRegistry,
+    type ContextTarget,
+  } from './contextmenu';
+  import { tooltip } from './tooltip';
+
+  let {
+    registry,
+    label,
+    selection = () => [],
+  }: {
+    registry: ContextRegistry;
+    /** The name of the menu for a screen reader, in the language of the page. */
+    label: string;
+    /** The targets that are selected right now; a target that is one of them hands the whole selection on. */
+    selection?: () => readonly ContextTarget[];
+  } = $props();
+
+  let shown = $state<{ x: number; y: number; items: MenuItem[]; back: HTMLElement | null } | null>(null);
+  let menu: HTMLElement | undefined = $state();
+  const uid = $props.id();
+
+  const roleOf = (item: MenuItem): string =>
+    item.kind === 'radio' ? 'menuitemradio' : item.kind === 'check' ? 'menuitemcheckbox' : 'menuitem';
+
+  function buttons(): HTMLButtonElement[] {
+    return menu ? [...menu.querySelectorAll<HTMLButtonElement>('button.cm-item:not(:disabled)')] : [];
+  }
+
+  /** Open the menu for `from` at a point; false (and nothing opened) when no provider has an entry. */
+  async function openFor(from: Element | null, at: { x: number; y: number }, back: HTMLElement | null): Promise<boolean> {
+    const { chain, element } = targetChain(from);
+    const items = buildContextMenu(registry, chain, selection());
+    if (toBlocks(items).length === 0) return false;
+    shown = { ...at, items, back: back ?? element };
+    await tick();
+    if (menu) {
+      const box = menu.getBoundingClientRect();
+      const place = placeMenu(at, box, { width: window.innerWidth, height: window.innerHeight });
+      shown = shown && { ...shown, x: place.x, y: place.y };
+    }
+    await tick();
+    buttons()[0]?.focus();
+    return true;
+  }
+
+  function close(restore: boolean): void {
+    const back = shown?.back ?? null;
+    shown = null;
+    if (restore && back && back.isConnected) back.focus();
+  }
+
+  function onContextMenu(event: MouseEvent): void {
+    if (event.defaultPrevented) return;
+    const el = event.target instanceof Element ? event.target : null;
+    if (isEditable(el)) {
+      close(false);
+      return;
+    }
+    const chain = targetChain(el).chain;
+    if (chain.length === 0) {
+      close(false);
+      return;
+    }
+    // Decided before the event is over: the browser's menu is replaced only by a menu that has something to say.
+    const items = buildContextMenu(registry, chain, selection());
+    if (toBlocks(items).length === 0) {
+      close(false);
+      return;
+    }
+    event.preventDefault();
+    void openFor(el, { x: event.clientX, y: event.clientY }, null);
+  }
+
+  function onKey(event: KeyboardEvent): void {
+    if (shown) {
+      onMenuKey(event);
+      return;
+    }
+    const byKey = event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey);
+    if (!byKey || event.isComposing) return;
+    const active = document.activeElement;
+    if (!active || isEditable(active)) return;
+    const { chain, element } = targetChain(active);
+    if (chain.length === 0 || toBlocks(buildContextMenu(registry, chain, selection())).length === 0) return;
+    event.preventDefault();
+    const box = (element ?? (active as HTMLElement)).getBoundingClientRect();
+    void openFor(active, { x: box.left, y: box.bottom }, active as HTMLElement);
+  }
+
+  function onMenuKey(event: KeyboardEvent): void {
+    const list = buttons();
+    const at = list.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close(true);
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const delta = event.key === 'ArrowDown' ? 1 : -1;
+      // A menu wraps: past the last entry is the first.
+      list[at < 0 ? (delta > 0 ? 0 : list.length - 1) : (at + delta + list.length) % list.length]?.focus();
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      list[event.key === 'Home' ? 0 : list.length - 1]?.focus();
+    } else if (event.key === 'Tab') {
+      close(false);
+    }
+  }
+
+  function pick(item: MenuItem): void {
+    if (item.kind === 'info' || item.kind === 'section' || item.kind === 'separator') return;
+    if ((item.kind === 'action' || item.kind === 'radio') && item.disabled) return;
+    close(true);
+    item.onselect();
+  }
+</script>
+
+<svelte:window
+  oncontextmenu={onContextMenu}
+  onkeydown={onKey}
+  onresize={() => close(false)}
+  onblur={() => close(false)}
+  onmousedown={(e) => {
+    if (shown && !(e.target instanceof Node && menu?.contains(e.target))) close(false);
+  }}
+  onscrollcapture={(e) => {
+    // A long menu scrolls inside itself; the page scrolling away from it closes it.
+    if (shown && !(e.target instanceof Node && menu?.contains(e.target))) close(false);
+  }}
+/>
+
+{#snippet rows(items: MenuItem[])}
+  {#each items as item, i (i)}
+    {#if item.kind === 'info'}
+      <p class="cm-note" role="none">{item.label}</p>
+    {:else if item.kind !== 'separator' && item.kind !== 'section'}
+      <button
+        type="button"
+        class="cm-item"
+        role={roleOf(item)}
+        aria-checked={item.kind === 'radio' || item.kind === 'check' ? item.checked : undefined}
+        aria-keyshortcuts={item.shortcut ? ariaShortcut(item.shortcut) : undefined}
+        disabled={(item.kind === 'action' || item.kind === 'radio') && item.disabled}
+        tabindex="-1"
+        use:tooltip={item.hint ?? ''}
+        onclick={() => pick(item)}
+      >
+        <span class="cm-mark" aria-hidden="true"
+          >{item.kind === 'radio' ? (item.checked ? '●' : '') : item.kind === 'check' ? (item.checked ? '✓' : '') : ''}</span
+        >
+        <span class="cm-text">{item.label}</span>
+        {#if item.shortcut}<span class="cm-shortcut">{item.shortcut}</span>{/if}
+      </button>
+    {/if}
+  {/each}
+{/snippet}
+
+{#if shown}
+  <div
+    class="cm-popup"
+    role="menu"
+    aria-label={label}
+    bind:this={menu}
+    style:left="{shown.x}px"
+    style:top="{shown.y}px"
+  >
+    {#each toBlocks(shown.items) as block, b (b)}
+      {#if block.kind === 'divider'}
+        <hr />
+      {:else if block.heading !== null}
+        <div role="group" aria-labelledby="{uid}-{b}">
+          <p class="cm-section" id="{uid}-{b}" role="presentation">{block.heading}</p>
+          {@render rows(block.items)}
+        </div>
+      {:else}
+        {@render rows(block.items)}
+      {/if}
+    {/each}
+  </div>
+{/if}
+
+<style>
+  .cm-popup {
+    position: fixed;
+    z-index: 40;
+    min-width: 13rem;
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 0.3rem;
+  }
+  .cm-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: 0;
+    border-radius: var(--radius);
+    padding: 0.3rem 0.5rem;
+    color: var(--text);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  /* As in the menu bar: the entry under the pointer or the key is filled with the accent. */
+  .cm-item:hover:not(:disabled),
+  .cm-item:focus-visible {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+  .cm-item:focus-visible {
+    outline: 2px solid transparent;
+    outline-offset: -2px;
+  }
+  .cm-item:hover:not(:disabled) .cm-mark,
+  .cm-item:focus-visible .cm-mark,
+  .cm-item:hover:not(:disabled) .cm-shortcut,
+  .cm-item:focus-visible .cm-shortcut {
+    color: inherit;
+  }
+  .cm-item:disabled {
+    color: var(--muted);
+    cursor: default;
+  }
+  .cm-text {
+    flex: 1;
+  }
+  .cm-shortcut {
+    margin-left: 1.5rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .cm-mark {
+    width: 1rem;
+    text-align: center;
+    color: var(--accent);
+  }
+  .cm-section {
+    margin: 0;
+    padding: 0.35rem 0.5rem 0.15rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .cm-note {
+    margin: 0;
+    padding: 0.3rem 0.5rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  hr {
+    border: 0;
+    border-top: 1px solid var(--line);
+    margin: 0.3rem 0;
+  }
+</style>
