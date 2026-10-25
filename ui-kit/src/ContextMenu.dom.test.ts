@@ -92,6 +92,19 @@ describe('ContextMenu', () => {
     expect(document.activeElement?.textContent).toContain('Compact');
   });
 
+  it('takes every letter while it is open (a letter that names nothing is no shortcut of the page behind it)', async () => {
+    const behind = vi.fn();
+    window.addEventListener('keydown', (e) => !e.defaultPrevented && behind(e.key));
+    rightClick(document.getElementById('card')!);
+    await settle();
+    key('x');
+    key('o');
+    expect(behind).not.toHaveBeenCalled();
+    // A chord with Ctrl (the palette) is not taken.
+    key('k', { ctrlKey: true });
+    expect(behind).toHaveBeenCalledWith('k');
+  });
+
   it('hands the target to the entry that was chosen', async () => {
     rightClick(document.getElementById('card')!);
     await settle();

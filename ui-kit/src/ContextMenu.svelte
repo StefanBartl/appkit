@@ -28,7 +28,7 @@
     selection?: () => readonly ContextTarget[];
   } = $props();
 
-  let shown = $state<{ x: number; y: number; items: MenuItem[]; back: HTMLElement | null } | null>(null);
+  let shown = $state<{ x: number; y: number; items: MenuItem[]; back: HTMLElement | null; placed: boolean } | null>(null);
   let menu: HTMLElement | undefined = $state();
   // A list longer than the window scrolls inside itself; a scroll box needs a way in for the keyboard (WCAG 2.1.1).
   let scrolls = $state(false);
@@ -43,22 +43,20 @@
     return menu ? [...menu.querySelectorAll<HTMLButtonElement>('button.cm-item:not(:disabled)')] : [];
   }
 
-  /** Open the menu for `from` at a point; false (and nothing opened) when no provider has an entry. */
-  async function openFor(from: Element | null, at: { x: number; y: number }, back: HTMLElement | null): Promise<boolean> {
-    const { chain, element } = targetChain(from);
-    const items = buildContextMenu(registry, chain, selection());
-    if (toBlocks(items).length === 0) return false;
-    shown = { ...at, items, back: back ?? element };
+  /**
+   * Show `items` at a point. The menu is drawn once out of sight at the corner of the window, where it has its natural
+   * width (a box at the right edge would be squeezed), measured, and then put where it fits.
+   */
+  async function show(items: MenuItem[], at: { x: number; y: number }, back: HTMLElement | null): Promise<void> {
+    shown = { x: 0, y: 0, items, back, placed: false };
     await tick();
     if (menu) {
-      const box = menu.getBoundingClientRect();
-      const place = placeMenu(at, box, { width: window.innerWidth, height: window.innerHeight });
-      shown = shown && { ...shown, x: place.x, y: place.y };
+      const place = placeMenu(at, menu.getBoundingClientRect(), { width: window.innerWidth, height: window.innerHeight });
+      shown = shown && { ...shown, x: place.x, y: place.y, placed: true };
     }
     await tick();
     scrolls = !!menu && menu.scrollHeight > menu.clientHeight;
     buttons()[0]?.focus();
-    return true;
   }
 
   function close(restore: boolean): void {
@@ -86,7 +84,7 @@
       return;
     }
     event.preventDefault();
-    void openFor(el, { x: event.clientX, y: event.clientY }, null);
+    void show(items, { x: event.clientX, y: event.clientY }, targetChain(el).element);
   }
 
   function onKey(event: KeyboardEvent): void {
@@ -99,10 +97,12 @@
     const active = document.activeElement;
     if (!active || isEditable(active)) return;
     const { chain, element } = targetChain(active);
-    if (chain.length === 0 || toBlocks(buildContextMenu(registry, chain, selection())).length === 0) return;
+    if (chain.length === 0) return;
+    const items = buildContextMenu(registry, chain, selection());
+    if (toBlocks(items).length === 0) return;
     event.preventDefault();
     const box = (element ?? (active as HTMLElement)).getBoundingClientRect();
-    void openFor(active, { x: box.left, y: box.bottom }, active as HTMLElement);
+    void show(items, { x: box.left, y: box.bottom }, active as HTMLElement);
   }
 
   function onMenuKey(event: KeyboardEvent): void {
@@ -131,10 +131,9 @@
         at,
         typed,
       );
-      if (to >= 0) {
-        event.preventDefault();
-        list[to]?.focus();
-      }
+      // A letter that names nothing is still not a shortcut of the page behind the menu.
+      event.preventDefault();
+      if (to >= 0) list[to]?.focus();
     }
   }
 
@@ -148,7 +147,7 @@
 
 <svelte:window
   oncontextmenu={onContextMenu}
-  onkeydown={onKey}
+  onkeydowncapture={onKey}
   onresize={() => close(false)}
   onblur={() => close(false)}
   onmousedown={(e) => {
@@ -195,6 +194,7 @@
     tabindex={scrolls ? 0 : undefined}
     style:left="{shown.x}px"
     style:top="{shown.y}px"
+    style:visibility={shown.placed ? undefined : 'hidden'}
   >
     {#each toBlocks(shown.items) as block, b (b)}
       {#if block.kind === 'divider'}
