@@ -1,7 +1,8 @@
 <script lang="ts">
   // The name of the app (or its logo) at the left end of the bar. With `onclick` it is a button that does what the app
   // says (the start view); without it, plain text. The hover and the focus draw a line under it and tint it with the
-  // accent; the movement stays out for a person who asked for less of it.
+  // accent; the movement stays out for a person who asked for less of it. The name never changes its width (a change
+  // of letter spacing would push the menus beside it), so the lift is a transform.
   import type { Snippet } from 'svelte';
   import { tooltip } from './tooltip';
 
@@ -74,13 +75,14 @@
     .kit-brand-link {
       transition:
         color 0.2s ease,
-        letter-spacing 0.25s ease;
+        transform 0.25s ease;
     }
     .kit-brand-link::after {
       transition: transform 0.3s ease;
     }
     .kit-brand-link:hover {
-      letter-spacing: 0.06em;
+      transform: scale(1.06);
+      transform-origin: left center;
     }
   }
 </style>

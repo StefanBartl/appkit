@@ -69,6 +69,18 @@ describe('closeOnBackdrop', () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
+  it('sends the cancel event first, like Escape: a dialog that prevents it stays open', () => {
+    const { dialog, close, click } = page();
+    const seen = vi.fn((e: Event) => e.preventDefault());
+    dialog.addEventListener('cancel', seen);
+    click(dialog, 10, 10);
+    expect(seen).toHaveBeenCalledTimes(1);
+    expect(close).not.toHaveBeenCalled();
+    dialog.removeEventListener('cancel', seen);
+    click(dialog, 10, 10);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it('does nothing for a dialog that is not open, and after destroy', () => {
     const { dialog, close, click, action } = page();
     dialog.removeAttribute('open');

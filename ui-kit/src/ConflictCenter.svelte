@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { closeOnBackdrop } from './backdrop';
   // The conflict center: every change the engine refused because the file had moved on. For each, what was wanted
   // beside what is there now, and the actions the app offers (try again on the version that is there, look at it,
   // let it go). Nothing is merged or written here. The person chooses how it is shown: every conflict in a list
@@ -62,6 +63,7 @@
 <dialog
   bind:this={dialog}
   aria-labelledby="conflicts-title"
+  use:closeOnBackdrop
   oncancel={(event) => {
     event.preventDefault();
     // Read when the key is pressed, so that a handler the app changed meanwhile is the one that runs.

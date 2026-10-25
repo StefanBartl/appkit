@@ -22,8 +22,9 @@ export interface BackdropOptions {
 
 /**
  * `use:closeOnBackdrop` on a `<dialog>`. Both the press and the release must be on the backdrop: a text selection
- * that starts in the dialog and ends outside it must not close it. The dialog closes with `close()`, so its own
- * `onclose` handler runs as it does for Escape.
+ * that starts in the dialog and ends outside it must not close it. It goes the way Escape goes: a `cancel` event first
+ * (a dialog that handles `oncancel` itself and calls `preventDefault()` - the conflict center asks the app - keeps
+ * it), then `close()`, so the `onclose` handler of the dialog runs as it does for Escape.
  */
 export function closeOnBackdrop(node: HTMLDialogElement, options: BackdropOptions = {}) {
   let opts = options;
@@ -39,7 +40,9 @@ export function closeOnBackdrop(node: HTMLDialogElement, options: BackdropOption
     pressedOutside = false;
     if (!start || !outside(e) || !node.open) return;
     if (opts.closeable && !opts.closeable()) return;
-    node.close();
+    const cancel = new Event('cancel', { cancelable: true });
+    node.dispatchEvent(cancel);
+    if (!cancel.defaultPrevented) node.close();
   };
 
   node.addEventListener('mousedown', onDown);
