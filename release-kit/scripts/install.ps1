@@ -198,12 +198,11 @@ Parameters (all optional):
             if ($name -eq '') { Exit-Install "the channel $channel has no build for Windows" }
             if ($name -cnotmatch $plain) { Exit-Install "the file name is not a plain word: $name" }
 
-            $base = "https://github.com/$repo/releases/download/$channel"
             Write-Output "downloading $name ($channel)"
             $path = Join-Path $work $name
-            Get-ReleaseFile $repo $channel $name $path
+            Get-ReleaseFile -From $repo -Channel $channel -Name $name -OutFile $path
             try {
-                Get-ReleaseFile $repo $channel 'SHA256SUMS' (Join-Path $work 'SHA256SUMS')
+                Get-ReleaseFile -From $repo -Channel $channel -Name 'SHA256SUMS' -OutFile (Join-Path $work 'SHA256SUMS')
             }
             catch {
                 if ($channel -eq 'latest') {
