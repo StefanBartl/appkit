@@ -1168,7 +1168,9 @@ mod tests {
         assert!(!made.description.to_lowercase().contains("tasks"));
 
         // A link of the person's own with the same name stays.
-        let program = IDENTITY.program_file();
+        // The name of the program on Windows, where the link is made (`program_file` has no
+        // `.exe` on the system that runs the test elsewhere).
+        let program = format!("{}.exe", IDENTITY.binary);
         crate::shell_link::write(&link, &app_link("mine", Path::new(r"C:\Apps\editor.exe")))
             .unwrap();
         remove_link_in(&desktop, IDENTITY.title, &program).unwrap();
