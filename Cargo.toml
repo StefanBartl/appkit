@@ -10,7 +10,8 @@ authors = ["Stefan Bartl"]
 repository = "https://github.com/StefanBartl/appkit"
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# deny, not forbid: one module may allow it (appkit-hub/src/handles.rs, Windows only).
+unsafe_code = "deny"
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }

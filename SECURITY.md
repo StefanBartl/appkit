@@ -119,6 +119,12 @@ switch that turns the host off.
   and no crate of an app (the kit must never depend on one); `cargo audit` and `cargo deny check` run
   in CI.
 * A version that is younger than seven days is not taken (`tools/check-lock-age.py`, also run in CI).
+* `unsafe` is denied in the whole workspace. One module allows it: `appkit-hub/src/handles.rs`
+  (Windows only, `windows-sys`, the version tokio already brings) clears the inherit flag of the
+  standard handles before a hub is started, so the hub does not hold a pipe of its caller. The
+  stable standard library cannot start a program without handing on every inheritable handle.
+  This replaced the script host (`wscript.exe`) for `start`, which an endpoint protection stops
+  when an unsigned program starts it.
 
 ## Reporting
 

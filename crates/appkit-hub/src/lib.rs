@@ -54,6 +54,8 @@ pub mod engine;
 pub mod env;
 pub mod fs_watch;
 pub mod guard;
+#[cfg(windows)]
+mod handles;
 pub mod http;
 pub mod hub;
 pub mod instance;

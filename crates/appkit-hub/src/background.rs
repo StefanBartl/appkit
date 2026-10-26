@@ -94,25 +94,9 @@ pub async fn start(app: &Background<'_>) -> Result<String, String> {
         eprintln!("{warning}");
     }
     let exe = std::env::current_exe().map_err(|e| format!("own program not found: {e}"))?;
-    // The log is created (and cut when it is large) before the hub writes.
-    drop(log_file(&dir)?);
-    if !spawn_hidden(&exe, &dir) {
-        let log = log_file(&dir)?;
-        let err = log
-            .try_clone()
-            .map_err(|e| format!("cannot write the log: {e}"))?;
-        let mut command = Command::new(&exe);
-        command
-            .arg("serve")
-            .stdin(Stdio::null())
-            .stdout(Stdio::from(log))
-            .stderr(Stdio::from(err));
-        detach(&mut command);
-        let child = command
-            .spawn()
-            .map_err(|e| format!("the hub could not be started: {e}"))?;
-        drop(child);
-    }
+    // A script of an older version that started the hub through the script host.
+    let _ = std::fs::remove_file(dir.join("start-hub.vbs"));
+    spawn_detached(&exe, &dir)?;
 
     // The hub says it is there by its record and its answer.
     let deadline = Instant::now() + Duration::from_secs(20);
@@ -142,67 +126,40 @@ fn vbs_bytes(text: &str) -> Vec<u8> {
     out
 }
 
-/// The command line that runs the hub with its output in the log. `None`
-/// for a path `cmd.exe` would read as something else.
-fn hidden_command_line(exe: &Path, log: &Path) -> Option<String> {
-    let plain = |p: &Path| {
-        let t = p.to_string_lossy();
-        !t.is_empty() && !t.contains(['"', '%', '\r', '\n'])
-    };
-    (plain(exe) && plain(log)).then(|| {
-        format!(
-            r#"cmd.exe /d /c ""{}" serve >>"{}" 2>&1""#,
-            exe.display(),
-            log.display()
-        )
-    })
-}
-
-/// The text of a script that starts `command` with no window and does not
-/// wait for it.
-fn script_text(command: &str) -> String {
-    format!(
-        "CreateObject(\"WScript.Shell\").Run \"{}\", 0, False\r\n",
-        command.replace('"', "\"\"")
-    )
-}
-
-/// Start the hub through the script host. A program started from here
-/// inherits every handle this process holds, so one that is started
-/// directly keeps a pipe of the caller (`<program> start | ...`) open for as
-/// long as it runs; the script host starts it without them. Returns whether
-/// that worked (otherwise the caller starts the program itself).
-fn spawn_hidden(exe: &Path, dir: &Path) -> bool {
-    if !cfg!(windows) {
-        return false;
-    }
-    let Some(line) = hidden_command_line(exe, &dir.join("hub.log")) else {
-        return false;
-    };
-    let Ok(host) = system_program("wscript.exe") else {
-        return false;
-    };
-    let script = dir.join("start-hub.vbs");
-    if std::fs::write(&script, vbs_bytes(&script_text(&line))).is_err() {
-        return false;
-    }
-    let ran = Command::new(host)
-        .args(["//B", "//Nologo"])
-        .arg(&script)
+/// Run `serve` as a program of its own: no window, its own process group, the output in the
+/// log. On Windows the standard handles of this process are made not inheritable first, so the
+/// hub does not hold the pipe of a caller (`<program> start | ...`) open (see `handles`). It is
+/// started directly, not through the script host: an endpoint protection stops a program that
+/// starts `wscript.exe`.
+fn spawn_detached(exe: &Path, dir: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    crate::handles::keep_standard_handles();
+    let log = log_file(dir)?;
+    let err = log
+        .try_clone()
+        .map_err(|e| format!("cannot write the log: {e}"))?;
+    let mut command = Command::new(exe);
+    command
+        .arg("serve")
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success());
-    let _ = std::fs::remove_file(&script);
-    ran
+        .stdout(Stdio::from(log))
+        .stderr(Stdio::from(err));
+    detach(&mut command);
+    let child = command
+        .spawn()
+        .map_err(|e| format!("the hub could not be started: {e}"))?;
+    drop(child);
+    Ok(())
 }
 
 #[cfg(windows)]
 fn detach(command: &mut Command) {
     use std::os::windows::process::CommandExt;
-    // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
-    command.creation_flags(0x0000_0008 | 0x0000_0200 | 0x0800_0000);
+    // CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW: a console of its own that has no window, not
+    // the one of the terminal (which may close) and not none (DETACHED_PROCESS): a hub with no
+    // console makes every console program it runs (`icacls`, `reg`) create one, which flashes a
+    // window and fails where no console can be made (STATUS_DLL_INIT_FAILED).
+    command.creation_flags(0x0000_0200 | 0x0800_0000);
 }
 
 #[cfg(unix)]
@@ -865,6 +822,11 @@ async fn install_steps_beside(
 ///
 /// A text for the person at the terminal.
 pub fn start_from(program: &Path) -> Result<String, String> {
+    // The program inherits every inheritable handle of this process, not only its stdio, and
+    // hands them on to the hub it starts: the standard handles of this process (a pipe of the
+    // caller) are kept here, as in `spawn_detached`.
+    #[cfg(windows)]
+    crate::handles::keep_standard_handles();
     let started = Command::new(program)
         .arg("start")
         .stdin(Stdio::null())
@@ -1268,22 +1230,6 @@ mod tests {
         } else {
             assert!(!file_is_held(&io_error(13)));
         }
-    }
-
-    #[test]
-    fn the_hidden_command_line_is_one_quoted_command() {
-        let line = hidden_command_line(
-            Path::new(r"C:\Program Files\t\tasks-hub.exe"),
-            Path::new(r"C:\Users\a b\hub.log"),
-        )
-        .unwrap();
-        assert_eq!(
-            line,
-            r#"cmd.exe /d /c ""C:\Program Files\t\tasks-hub.exe" serve >>"C:\Users\a b\hub.log" 2>&1""#
-        );
-        assert!(script_text(&line).contains(r#"/c """"C:\Program"#));
-        // A name `cmd.exe` would expand is not used.
-        assert!(hidden_command_line(Path::new(r"C:\%X%\h.exe"), Path::new("l")).is_none());
     }
 
     #[test]
