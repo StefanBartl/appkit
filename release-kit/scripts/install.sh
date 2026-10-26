@@ -125,12 +125,41 @@ fetch() {
     fi
 }
 
+# A private repository answers an anonymous download with 404. With a token in GH_TOKEN (or
+# GITHUB_TOKEN; read access to the repository is enough) a file is fetched through the API instead:
+# the asset id is looked up by name, then the file comes from the asset address; curl does not pass
+# the token on to the host the API redirects to.
+TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+
+# fetch_release_file REPO CHANNEL NAME OUT
+fetch_release_file() {
+    if [ -z "$TOKEN" ]; then
+        fetch "https://github.com/$1/releases/download/$2/$3" "$4"
+        return
+    fi
+    command -v curl >/dev/null 2>&1 || fail "need curl to download with a token"
+    curl -fsSL --proto '=https' --proto-redir '=https' -H "Authorization: Bearer $TOKEN" \
+        -o "$WORK/release.json" "https://api.github.com/repos/$1/releases/tags/$2" || return 1
+    # In an asset the "id" comes right before "node_id" and "name"; the file name is a plain word.
+    id="$(tr -d '\n' <"$WORK/release.json" |
+        sed -n "s/.*\"id\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\),[[:space:]]*\"node_id\"[[:space:]]*:[[:space:]]*\"[^\"]*\",[[:space:]]*\"name\"[[:space:]]*:[[:space:]]*\"$3\".*/\1/p" |
+        head -n 1)"
+    [ -n "$id" ] || return 1
+    curl -fsSL --proto '=https' --proto-redir '=https' -H "Authorization: Bearer $TOKEN" \
+        -H "Accept: application/octet-stream" -o "$4" "https://api.github.com/repos/$1/releases/assets/$id"
+}
+
 # The tag of the newest published release; empty when the repository has none (404). Any other
 # failure (no network, a rate limit) stops: it must not quietly turn into the rolling build.
 newest_tag() {
     if command -v curl >/dev/null 2>&1; then
-        code="$(curl -sSL --proto '=https' --proto-redir '=https' -o "$WORK/newest.json" -w '%{http_code}' "$1")" ||
-            fail "cannot ask GitHub for the newest release of $REPO"
+        if [ -n "$TOKEN" ]; then
+            code="$(curl -sSL --proto '=https' --proto-redir '=https' -H "Authorization: Bearer $TOKEN" -o "$WORK/newest.json" -w '%{http_code}' "$1")" ||
+                fail "cannot ask GitHub for the newest release of $REPO"
+        else
+            code="$(curl -sSL --proto '=https' --proto-redir '=https' -o "$WORK/newest.json" -w '%{http_code}' "$1")" ||
+                fail "cannot ask GitHub for the newest release of $REPO"
+        fi
     else
         fail "need curl to ask GitHub for the newest release (or give --version TAG or --rolling)"
     fi
@@ -202,8 +231,8 @@ if [ -z "$FILE" ]; then
 
     BASE="https://github.com/$REPO/releases/download/$CHANNEL"
     say "downloading $NAME ($CHANNEL)"
-    fetch "$BASE/$NAME" "$WORK/$NAME" || fail "cannot download $BASE/$NAME"
-    if ! fetch "$BASE/SHA256SUMS" "$WORK/SHA256SUMS"; then
+    fetch_release_file "$REPO" "$CHANNEL" "$NAME" "$WORK/$NAME" || fail "cannot download $BASE/$NAME (a private repository needs GH_TOKEN)"
+    if ! fetch_release_file "$REPO" "$CHANNEL" "SHA256SUMS" "$WORK/SHA256SUMS"; then
         [ "$CHANNEL" = "latest" ] && fail "SHA256SUMS of the rolling build is missing (a build is running: try again in a few minutes)"
         fail "cannot download $BASE/SHA256SUMS"
     fi

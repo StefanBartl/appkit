@@ -45,6 +45,17 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/OWNER/NAME/release
 curl -fsSL https://github.com/OWNER/NAME/releases/download/latest/install.sh | sh
 ```
 
+**A private repository** answers these addresses with 404. Set `GH_TOKEN` (or `GITHUB_TOKEN`; a token
+with read access to the repository is enough) and the script downloads through the API instead, from
+a copy you saved first (the one-liner cannot send the token for its own download):
+
+```
+gh release download latest -R OWNER/NAME -p install.ps1   # or install.sh
+$env:GH_TOKEN = '<token>'; .\install.ps1
+```
+
+The token goes only to `api.github.com`, never on to the storage host the API redirects to.
+
 Why a script and not only the setup: a file the browser downloads is marked as coming from the
 internet (Mark-of-the-Web), and SmartScreen stops an unsigned setup with that mark; on a managed
 workstation it may not be run at all. A file the script downloads carries no mark. What the script

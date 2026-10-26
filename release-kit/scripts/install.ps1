@@ -90,6 +90,41 @@ Parameters (all optional):
         return $Stamped
     }
 
+    # A private repository answers an anonymous download with 404. With a token in GH_TOKEN (or
+    # GITHUB_TOKEN; read access to the repository is enough) a file comes through the API instead:
+    # the asset is looked up by name and fetched from its API address, and the token is not sent on
+    # to the storage host the API redirects to.
+    $token = ''
+    if ($env:GH_TOKEN) { $token = $env:GH_TOKEN } elseif ($env:GITHUB_TOKEN) { $token = $env:GITHUB_TOKEN }
+    $apiHeaders = @{ 'User-Agent' = 'release-kit-install' }
+    if ($token -ne '') { $apiHeaders['Authorization'] = "Bearer $token" }
+
+    function Get-ReleaseFile([string] $From, [string] $Channel, [string] $Name, [string] $OutFile) {
+        if ($token -eq '') {
+            Invoke-WebRequest -Uri "https://github.com/$From/releases/download/$Channel/$Name" -OutFile $OutFile -UseBasicParsing
+            return
+        }
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$From/releases/tags/$Channel" -Headers $apiHeaders -UseBasicParsing
+        $asset = @($release.assets | Where-Object { $_.name -ceq $Name }) | Select-Object -First 1
+        if (-not $asset) { throw "the release $Channel of $From has no file $Name" }
+        $headers = @{} + $apiHeaders
+        $headers['Accept'] = 'application/octet-stream'
+        $location = ''
+        try {
+            Invoke-WebRequest -Uri $asset.url -Headers $headers -OutFile $OutFile -UseBasicParsing -MaximumRedirection 0 -ErrorAction Stop
+            return
+        }
+        catch {
+            $response = $_.Exception.PSObject.Properties['Response']
+            if (-not ($response -and $response.Value)) { throw }
+            $found = $response.Value.Headers.Location
+            if (-not $found) { $found = $response.Value.Headers['Location'] }
+            $location = [string] ($found | Select-Object -First 1)
+            if ($location -eq '') { throw }
+        }
+        Invoke-WebRequest -Uri $location -OutFile $OutFile -UseBasicParsing
+    }
+
     $repo = Select-Given $Repo $StampRepo
     $app = Select-Given $App $StampApp
     $kind = Select-Given $Kind $StampKind
@@ -137,7 +172,7 @@ Parameters (all optional):
             if ($channel -eq '') {
                 Write-Output "looking for the newest release of $repo"
                 try {
-                    $newest = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -UseBasicParsing
+                    $newest = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers $apiHeaders -UseBasicParsing
                     $channel = [string] $newest.tag_name
                 }
                 catch {
@@ -166,9 +201,9 @@ Parameters (all optional):
             $base = "https://github.com/$repo/releases/download/$channel"
             Write-Output "downloading $name ($channel)"
             $path = Join-Path $work $name
-            Invoke-WebRequest -Uri "$base/$name" -OutFile $path -UseBasicParsing
+            Get-ReleaseFile $repo $channel $name $path
             try {
-                Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile (Join-Path $work 'SHA256SUMS') -UseBasicParsing
+                Get-ReleaseFile $repo $channel 'SHA256SUMS' (Join-Path $work 'SHA256SUMS')
             }
             catch {
                 if ($channel -eq 'latest') {

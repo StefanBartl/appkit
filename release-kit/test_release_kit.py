@@ -27,6 +27,11 @@ sys.path.insert(0, str(KIT))
 
 import stamp  # noqa: E402
 
+# The install scripts download through the API when a token is set (a private repository); a
+# token of the person who runs the tests must not turn the other tests into API calls.
+for _name in ("GH_TOKEN", "GITHUB_TOKEN"):
+    os.environ.pop(_name, None)
+
 PS1 = KIT / "scripts" / "install.ps1"
 SH = KIT / "scripts" / "install.sh"
 PUBLISH = KIT / "publish.sh"
@@ -77,6 +82,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
     -w) write="$2"; shift 2 ;;
+    -H) printf '%s\n' "$2" >> "$CURL_LOG.headers"; shift 2 ;;
     --proto|--proto-redir) shift 2 ;;
     -*) shift ;;
     *) url="$1"; shift ;;
@@ -84,6 +90,25 @@ while [ $# -gt 0 ]; do
 done
 printf '%s\n' "$url" >> "$CURL_LOG"
 case "$url" in
+  */releases/tags/*)
+    # What the API says of a release: the files of the fixtures, each with an id (100, 101, ...).
+    n=100
+    {
+      printf '{\n  "assets": [\n'
+      for f in $(ls "$FIXTURES"); do
+        printf '    {\n      "url": "https://api.github.com/repos/o/r/releases/assets/%s",\n      "id": %s,\n      "node_id": "N%s",\n      "name": "%s",\n      "size": 1\n    },\n' "$n" "$n" "$n" "$f"
+        n=$((n + 1))
+      done
+      printf '    {}\n  ]\n}\n'
+    } > "$out"
+    exit 0 ;;
+  */releases/assets/*)
+    n=100
+    for f in $(ls "$FIXTURES"); do
+      [ "$n" = "${url##*/}" ] && { cp "$FIXTURES/$f" "$out"; exit 0; }
+      n=$((n + 1))
+    done
+    exit 22 ;;
   */releases/latest)
     code="${FAKE_NEWEST:-404}"
     [ "$code" = 200 ] && printf '{"tag_name": "%s"}' "$FAKE_TAG" > "$out"
@@ -347,6 +372,28 @@ class InstallShTest(unittest.TestCase):
         base = "https://github.com/Owner/app-repo/releases/download/v1.2.3/"
         self.assertEqual(self.urls(), [base + "demo-hub-1.2.3-x86_64-unknown-linux-gnu.tar.gz", base + "SHA256SUMS"])
         self.assertEqual(self.out.read_text().strip(), "install")
+
+    def test_a_token_downloads_through_the_api(self) -> None:
+        # A private repository answers the public address with 404: with a token the files come
+        # through the API (the release by tag, then each asset by id), the token in the header.
+        self.fixtures("demo-hub-1.2.3-x86_64-unknown-linux-gnu.tar.gz")
+        script = self.stamped(channel="v1.2.3", release_asset="demo-hub-{version}-{triple}.tar.gz")
+        res = self.download(script, GH_TOKEN="secret-token")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        api = "https://api.github.com/repos/Owner/app-repo/releases/"
+        urls = self.urls()
+        self.assertEqual(len(urls), 4, urls)
+        self.assertTrue(all(u.startswith(api) for u in urls), urls)
+        self.assertEqual([urls[0], urls[2]], [api + "tags/v1.2.3"] * 2)
+        self.assertIn("Authorization: Bearer secret-token", (self.tmp / "curl.log.headers").read_text())
+        self.assertEqual(self.out.read_text().strip(), "install")
+
+    def test_without_a_token_the_header_is_never_sent(self) -> None:
+        self.fixtures("demo-hub-1.2.3-x86_64-unknown-linux-gnu.tar.gz")
+        script = self.stamped(channel="v1.2.3", release_asset="demo-hub-{version}-{triple}.tar.gz")
+        res = self.download(script)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertFalse((self.tmp / "curl.log.headers").exists())
 
     def test_the_stamped_rolling_copy_downloads_latest(self) -> None:
         self.fixtures("demo-hub-linux-x86_64.tar.gz")
