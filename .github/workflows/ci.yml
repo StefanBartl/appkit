@@ -1,85 +1,90 @@
+# CI of appkit.
+#
+# Runs on a self-hosted runner (the author's Windows machine): the repository is private and has no paid plan, so
+# hosted runners do not start (billing/spending-limit errors, not a code problem). Runner: $REPOS_DIR/tasks-vault/
+# TOOLS/self-hosted-runner.md; start it with `scripts/runners.ps1 ensure appkit` of the nvim config (or
+# `:MyPlugins runner start appkit`). Without a running runner a push stays "Queued" (no red mark, discarded after 24 h).
+# Only for PRIVATE repos with trusted authors; no `pull_request` trigger on purpose (a PR would run its own workflow
+# with the author's rights on this machine). Windows only: the Linux legs of the former matrix are gone, and so is
+# ShellCheck (not on the runner): the shell scripts of release-kit are checked by the Linux tests no more.
+#
+# The tools (cargo, rustfmt, clippy, cargo-audit, cargo-deny, pnpm, python) are expected on the runner's PATH and are
+# not pinned here; the jobs print their versions.
+
 name: ci
 
 on:
   push:
     branches: [main]
-  pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
+# `shell: bash` resolves to the WSL launcher on this machine; Git Bash is named explicitly, in 8.3 form because the
+# shell string is split at spaces.
+defaults:
+  run:
+    shell: C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -e -o pipefail {0}
+
 jobs:
   rust:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, windows]
+    timeout-minutes: 30
     steps:
       # Actions are pinned by commit; the comment names the tag.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 (node24)
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
-        with:
-          components: rustfmt, clippy
+      - run: cargo --version && rustc --version
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # No Neovim is needed: the binary fake-engine of appkit-testkit stands in for an engine.
       - run: cargo test --workspace --locked
 
   supply-chain:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, windows]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 (node24)
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe # v2
-        with:
-          tool: cargo-audit,cargo-deny
       # Known advisories, licenses, sources, and no app's crate in the tree of the kit.
       - run: cargo audit
       - run: cargo deny check
       # No crate version younger than a week (see tools/check-lock-age.py).
-      - run: python3 tools/check-lock-age.py --min-days 7
+      - run: python tools/check-lock-age.py --min-days 7
 
   # The tools test themselves; no control character in a tracked file, no colour in the CSS of the kit outside its tokens.
   hygiene:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, windows]
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 (node24)
         with:
           persist-credentials: false
-      - run: python3 -m unittest discover tools
-      - run: python3 tools/check-control-chars.py
-      - run: python3 tools/check-color-literals.py --root ui-kit/src --tokens ui-kit/src/tokens.css
+      - run: python -m unittest discover tools
+      - run: python tools/check-control-chars.py
+      - run: python tools/check-color-literals.py --root ui-kit/src --tokens ui-kit/src/tokens.css
 
-  # The release kit (release-kit): stamping, install.sh with dash and Git Bash, install.ps1 with pwsh and
+  # The release kit (release-kit): stamping, install.sh with Git Bash, install.ps1 with pwsh and
   # Windows PowerShell 5.1 against fake builds, publish.sh against a fake gh.
   release-kit:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, windows]
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 (node24)
         with:
           persist-credentials: false
-      - shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then py=python; else py=python3; fi
-          "$py" -m unittest discover -s release-kit -p "test_*.py" -v
-      # The scripts every release of every app carries: no finding of shellcheck (any level) and of
-      # PSScriptAnalyzer (errors, warnings and information).
-      - name: shellcheck on the shell scripts
-        if: runner.os == 'Linux'
-        run: shellcheck release-kit/scripts/install.sh release-kit/publish.sh
+      - run: python -m unittest discover -s release-kit -p "test_*.py" -v
+      # install.ps1: no finding of PSScriptAnalyzer (errors, warnings and information).
       - name: PSScriptAnalyzer on install.ps1
-        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           Install-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser -Force
@@ -89,7 +94,8 @@ jobs:
 
   # The browser parts of the kit (ui-kit): source only, checked and tested here; the apps bundle it.
   ui-kit:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, windows]
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: ui-kit
@@ -97,9 +103,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 (node24)
         with:
           persist-credentials: false
-      # The lockfile is the truth; the age and trust policy are in ui-kit/pnpm-workspace.yaml.
-      - run: npm install --global pnpm@11.28.2
-      - run: pnpm install --frozen-lockfile
+      # The lockfile is the truth; the age and trust policy are in ui-kit/pnpm-workspace.yaml. pnpm is the
+      # runner's own (not installed globally here: that would change this machine on every run).
+      - run: pnpm --version && pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm test
       - run: pnpm audit --audit-level high
