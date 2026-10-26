@@ -82,7 +82,10 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 (node24)
         with:
           persist-credentials: false
+      # Windows PowerShell 5.1 started from the runner finds no Get-FileHash without its own module path.
       - run: python -m unittest discover -s release-kit -p "test_*.py" -v
+        env:
+          PSModulePath: C:\Program Files\WindowsPowerShell\Modules;C:\Windows\system32\WindowsPowerShell\v1.0\Modules
       # install.ps1: no finding of PSScriptAnalyzer (errors, warnings and information).
       - name: PSScriptAnalyzer on install.ps1
         shell: pwsh
