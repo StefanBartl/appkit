@@ -185,6 +185,15 @@ The release page of a tag: `title` is its title (default: the tag; one line), an
 (`…/releases/download/{tag}/install.ps1`). The rolling build names its commit in its title itself. A draft
 that is there already gets the title and the notes of this run.
 
+### A Windows-only app, a self-hosted Windows runner
+
+Both actions run on a Windows runner too. On a self-hosted one `shell: bash` is the WSL launcher, which cannot read
+the runner's paths, so each action has a second step that runs the same script (`prepare.sh`, `publish.sh`) with Git
+Bash by its full path (`C:\PROGRA~1\Git\bin\bash.exe`, the 8.3 form: the shell string is split at spaces); the plain
+`bash` step is skipped there. Git for Windows must be in `C:\Program Files`. For an app that is built for Windows only,
+leave the `unix-*` inputs empty and set `expect` to the number of Windows files (one): there is no `install.sh`.
+`publish` then needs `python3`, `gh` and `sha256sum` on the runner's PATH (Git Bash brings the last one).
+
 ## Checks
 
 ```

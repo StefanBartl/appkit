@@ -188,6 +188,24 @@ class ManifestsTest(unittest.TestCase):
                 self.assertEqual(declared - used, set(), "declared but never read")
 
 
+    def test_every_bash_step_has_a_git_bash_twin_for_windows(self) -> None:
+        # On a self-hosted Windows runner `shell: bash` is the WSL launcher, which cannot read the runner's
+        # Windows paths: the step runs there by the full path of Git Bash (8.3 form, the shell string is split
+        # at spaces), and the bash one is skipped on Windows.
+        yaml = self.yaml()
+        for path in sorted(KIT.glob("*/action.yml")):
+            with self.subTest(action=path.parent.name):
+                steps = yaml.safe_load(path.read_text(encoding="utf-8"))["runs"]["steps"]
+                bash = [s for s in steps if s.get("shell") == "bash"]
+                git_bash = [s for s in steps if str(s.get("shell", "")).lower().startswith("c:\\progra~1\\git\\bin\\bash.exe")]
+                self.assertTrue(bash, "a bash step for Linux and macOS")
+                self.assertEqual(len(bash), len(git_bash), "one Git Bash twin per bash step")
+                for s in bash:
+                    self.assertEqual(s.get("if"), "runner.os != 'Windows'")
+                for s in git_bash:
+                    self.assertEqual(s.get("if"), "runner.os == 'Windows'")
+
+
 class StampTest(unittest.TestCase):
     def test_ps1_gets_every_value_and_nothing_else_changes(self) -> None:
         source = PS1.read_text(encoding="utf-8")
@@ -843,6 +861,16 @@ class PublishTest(unittest.TestCase):
         for name in ("install.ps1", "install.sh", "SHA256SUMS", "demo-hub-windows-x86_64.exe"):
             self.assertIn(name, upload)
         self.assertFalse(any("git/refs/tags" in c for c in calls), "a release tag is never moved")
+
+    def test_a_windows_only_release_has_no_install_sh(self) -> None:
+        # An app built for Windows only (the desktop apps on the author's runner): no unix inputs, one file.
+        (self.dist / "demo-hub-linux-x86_64.tar.gz").unlink()
+        res = self.publish(TAG="v1.2.3", SHA="", GH_NO_RELEASE="1", EXPECT="1", UNIX_KIND="", UNIX_PROGRAM="",
+                           UNIX_RELEASE_ASSET="", UNIX_ROLLING_ASSET="")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        upload = next(c for c in self.calls() if c.startswith("gh release upload v1.2.3"))
+        self.assertIn("install.ps1", upload)
+        self.assertNotIn("install.sh", upload)
 
     def test_a_draft_of_an_earlier_cut_gets_the_words_of_this_one(self) -> None:
         notes = self.tmp / "notes.md"

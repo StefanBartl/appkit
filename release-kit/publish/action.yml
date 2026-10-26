@@ -1,7 +1,9 @@
 # release-kit/publish: put the built files, the stamped install scripts and SHA256SUMS on a release.
 #
-# Runs on a Linux runner (bash, python3, gh, sha256sum), after the build jobs have uploaded their
-# files as artifacts and the job has downloaded them into one folder:
+# Runs on a Linux runner (bash, python3, gh, sha256sum) or a Windows runner (Git Bash, python3, gh; on a
+# self-hosted one `shell: bash` would be the WSL launcher, so Git Bash is named by its full path), after the
+# build jobs have uploaded their files as artifacts and the job has downloaded them into one folder. Only a
+# Windows build is fine: leave the unix-* inputs empty and `expect: 1`, and there is no install.sh.
 #
 #   publish:
 #     needs: [prepare, build]
@@ -109,6 +111,7 @@ runs:
   using: composite
   steps:
     - name: Publish
+      if: runner.os != 'Windows'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
@@ -130,3 +133,26 @@ runs:
         NOTES_FILE: ${{ inputs.notes-file }}
         TITLE: ${{ inputs.title }}
       run: bash "$KIT/publish.sh"
+    - name: Publish (Windows)
+      if: runner.os == 'Windows'
+      shell: C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -e -o pipefail {0}
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        KIT: ${{ github.action_path }}/..
+        TAG: ${{ inputs.tag }}
+        SHA: ${{ inputs.sha }}
+        FILES: ${{ inputs.files }}
+        EXPECT: ${{ inputs.expect }}
+        APP: ${{ inputs.app }}
+        WINDOWS_KIND: ${{ inputs.windows-kind }}
+        WINDOWS_PROGRAM: ${{ inputs.windows-program }}
+        WINDOWS_RELEASE_ASSET: ${{ inputs.windows-release-asset }}
+        WINDOWS_ROLLING_ASSET: ${{ inputs.windows-rolling-asset }}
+        UNIX_KIND: ${{ inputs.unix-kind }}
+        UNIX_PROGRAM: ${{ inputs.unix-program }}
+        UNIX_RELEASE_ASSET: ${{ inputs.unix-release-asset }}
+        UNIX_ROLLING_ASSET: ${{ inputs.unix-rolling-asset }}
+        EXTRA: ${{ inputs.extra }}
+        NOTES_FILE: ${{ inputs.notes-file }}
+        TITLE: ${{ inputs.title }}
+      run: bash "$(cygpath -u "$KIT")/publish.sh"
