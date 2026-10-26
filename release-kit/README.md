@@ -125,7 +125,7 @@ jobs:
       short: ${{ steps.prepare.outputs.short }}
     steps:
       - id: prepare
-        uses: StefanBartl/appkit/release-kit/prepare@<sha> # vX.Y.Z
+        uses: WKDSteve/appkit/release-kit/prepare@<sha> # vX.Y.Z
         with:
           sha: ${{ github.event.workflow_run.head_sha }}
           token: ${{ github.token }}
@@ -150,7 +150,7 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@<sha>
         with: { pattern: rolling-*, path: dist, merge-multiple: true }
-      - uses: StefanBartl/appkit/release-kit/publish@<sha> # vX.Y.Z
+      - uses: WKDSteve/appkit/release-kit/publish@<sha> # vX.Y.Z
         with:
           token: ${{ github.token }}
           tag: latest

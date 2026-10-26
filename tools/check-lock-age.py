@@ -24,7 +24,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-USER_AGENT = "appkit-lock-age-check (https://github.com/StefanBartl/appkit)"
+USER_AGENT = "appkit-lock-age-check (https://github.com/WKDSteve/appkit)"
 
 
 def locked_registry_packages(lock_text):

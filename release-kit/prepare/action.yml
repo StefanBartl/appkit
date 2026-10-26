@@ -8,7 +8,7 @@
 # Used in the job that decides, with `contents: write` and the commit of the CI run:
 #
 #   - id: prepare
-#     uses: StefanBartl/appkit/release-kit/prepare@<sha> # vX.Y.Z
+#     uses: WKDSteve/appkit/release-kit/prepare@<sha> # vX.Y.Z
 #     with:
 #       sha: ${{ github.event.workflow_run.head_sha }}
 #       token: ${{ github.token }}

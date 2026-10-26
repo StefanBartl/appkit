@@ -4,7 +4,7 @@
   "private": false,
   "description": "The parts of the browser page that every app of appkit shares: the design tokens and base rules, the menu bar, the multi-select, the info button, the command palette, the toast, the conflict center, the hub client, the browser cache, the markdown reader, the hint popup, the event-stream reader, the pairing code and the hidden-character guard. Source only: the app's bundler compiles it.",
   "license": "MIT",
-  "repository": "https://github.com/StefanBartl/appkit",
+  "repository": "https://github.com/WKDSteve/appkit",
   "type": "module",
   "svelte": "./src/index.ts",
   "exports": {

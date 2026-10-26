@@ -1,7 +1,7 @@
 # appkit
 
 The shared foundation of the local desktop hubs of
-[tasks-desktop](https://github.com/StefanBartl/tasks-desktop) and `rules-desktop`: a web server on
+[tasks-desktop](https://github.com/WKDSteve/tasks-desktop) and `rules-desktop`: a web server on
 your own machine that serves an app's page and data to the browser, asks a Neovim engine for the
 data, and never trusts anything that reaches it.
 
@@ -24,23 +24,23 @@ There are no releases on crates.io. An app depends on a tag:
 
 ```toml
 [dependencies]
-appkit-hub = { git = "https://github.com/StefanBartl/appkit", tag = "v0.1.0" }
+appkit-hub = { git = "https://github.com/WKDSteve/appkit", tag = "v0.1.0" }
 
 [dev-dependencies]
-appkit-testkit = { git = "https://github.com/StefanBartl/appkit", tag = "v0.1.0" }
+appkit-testkit = { git = "https://github.com/WKDSteve/appkit", tag = "v0.1.0" }
 ```
 
 The page of an app takes the same tag, by its folder (`pnpm-lock.yaml` pins the commit):
 
 ```
-pnpm add "git+https://github.com/StefanBartl/appkit.git#vX.Y.Z&path:ui-kit"
+pnpm add "git+https://github.com/WKDSteve/appkit.git#vX.Y.Z&path:ui-kit"
 ```
 
 `Cargo.lock` then pins the commit of the tag. To work on the kit and an app at once, point the app at
 a local checkout in a `.cargo/config.toml` that is not committed:
 
 ```toml
-[patch."https://github.com/StefanBartl/appkit"]
+[patch."https://github.com/WKDSteve/appkit"]
 appkit-core = { path = "../appkit/crates/appkit-core" }
 appkit-hub = { path = "../appkit/crates/appkit-hub" }
 appkit-testkit = { path = "../appkit/crates/appkit-testkit" }

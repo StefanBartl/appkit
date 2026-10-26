@@ -35,7 +35,7 @@ bundler (Vite with the Svelte plugin) compiles them, there is no build here.
 An app depends on the folder of a tag of this repository:
 
 ```
-pnpm add "git+https://github.com/StefanBartl/appkit.git#vX.Y.Z&path:ui-kit"
+pnpm add "git+https://github.com/WKDSteve/appkit.git#vX.Y.Z&path:ui-kit"
 ```
 
 `pnpm-lock.yaml` then pins the commit. In the page:

@@ -13,7 +13,7 @@
 #         with: { persist-credentials: false }
 #       - uses: actions/download-artifact@<sha>
 #         with: { pattern: rolling-*, path: dist, merge-multiple: true }
-#       - uses: StefanBartl/appkit/release-kit/publish@<sha> # vX.Y.Z
+#       - uses: WKDSteve/appkit/release-kit/publish@<sha> # vX.Y.Z
 #         with:
 #           token: ${{ github.token }}
 #           tag: latest                            # or ${{ github.ref_name }} for a release

@@ -66,7 +66,7 @@ usage() {
     if [ -f "$0" ] && head -n 2 "$0" | grep -q 'release-kit'; then
         sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
     else
-        say "install.sh of release-kit: https://github.com/StefanBartl/appkit/tree/main/release-kit"
+        say "install.sh of release-kit: https://github.com/WKDSteve/appkit/tree/main/release-kit"
     fi
 }
 

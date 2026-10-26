@@ -7,7 +7,7 @@ edition = "2024"
 rust-version = "1.95"
 license = "MIT"
 authors = ["Stefan Bartl"]
-repository = "https://github.com/StefanBartl/appkit"
+repository = "https://github.com/WKDSteve/appkit"
 
 [workspace.lints.rust]
 # deny, not forbid: one module may allow it (appkit-hub/src/handles.rs, Windows only).
