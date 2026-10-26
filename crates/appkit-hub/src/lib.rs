@@ -63,6 +63,7 @@ pub mod limits;
 pub mod loginitems;
 pub mod search;
 pub mod setup;
+pub mod shell_link;
 pub mod store;
 pub mod usage;
 pub mod vaults;

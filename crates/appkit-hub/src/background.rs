@@ -115,17 +115,6 @@ pub async fn start(app: &Background<'_>) -> Result<String, String> {
     ))
 }
 
-/// The bytes of a script for the script host: UTF-16 with a byte order
-/// mark, the one form it reads whatever the code page of the system is (a
-/// profile named `Müller` is a path in the script).
-fn vbs_bytes(text: &str) -> Vec<u8> {
-    let mut out = vec![0xFF, 0xFE];
-    for unit in text.encode_utf16() {
-        out.extend_from_slice(&unit.to_le_bytes());
-    }
-    out
-}
-
 /// Run `serve` as a program of its own: no window, its own process group, the output in the
 /// log. On Windows the standard handles of this process are made not inheritable first, so the
 /// hub does not hold the pipe of a caller (`<program> start | ...`) open (see `handles`). It is
@@ -960,6 +949,56 @@ fn program_left_text(app: &Background<'_>, exe: &Path) -> String {
     )
 }
 
+/// The key that names the folders of the user; `Desktop` there is the desktop, also one that was
+/// moved (to OneDrive, by a policy).
+const SHELL_FOLDERS_KEY: &str =
+    r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders";
+
+/// `%NAME%` in `text` replaced by the variable of `env`; `None` when one is not set (or the text
+/// is cut).
+fn expand_vars(text: &str, env: &Env) -> Option<PathBuf> {
+    let mut out = OsString::new();
+    let mut rest = text;
+    while let Some(at) = rest.find('%') {
+        out.push(&rest[..at]);
+        let after = &rest[at + 1..];
+        let end = after.find('%')?;
+        out.push(env.get(&after[..end])?);
+        rest = &after[end + 1..];
+    }
+    out.push(rest);
+    Some(PathBuf::from(out))
+}
+
+/// The desktop folder of the user: `Desktop` under [`SHELL_FOLDERS_KEY`] with its variables
+/// expanded (`%OneDrive%\Desktop`: the variable comes from the environment, whatever its
+/// characters), else `%USERPROFILE%\Desktop` when the registry has no such value. A value that is
+/// there but cannot be used is an error, not a guess: `reg.exe` prints in the code page of the
+/// console, so a path with a character outside it comes back broken, and a link put in another
+/// folder would not be on the desktop the person sees.
+fn desktop_folder(env: &Env, reg: &dyn Registry) -> Result<PathBuf, String> {
+    let out = reg.run(&args(&["query", SHELL_FOLDERS_KEY, "/v", "Desktop"]))?;
+    let named = if out.success {
+        reg_value(&out.stdout, "Desktop")
+    } else {
+        None
+    };
+    if let Some(value) = named {
+        let dir = if value.contains('\u{FFFD}') {
+            None
+        } else {
+            expand_vars(&value, env)
+        };
+        return dir.filter(|p| p.is_absolute()).ok_or_else(|| {
+            format!("the desktop folder the registry names cannot be used: {value}")
+        });
+    }
+    env.path("USERPROFILE")
+        .filter(|p| p.is_absolute())
+        .map(|p| p.join("Desktop"))
+        .ok_or_else(|| "no desktop folder found (no USERPROFILE)".to_owned())
+}
+
 /// Take the link of the desktop (named by the title of the app) away (Windows), or the launcher (Linux).
 fn remove_shortcut(app: &Background<'_>, env: &Env) -> Result<String, String> {
     if !cfg!(windows) {
@@ -968,91 +1007,69 @@ fn remove_shortcut(app: &Background<'_>, env: &Env) -> Result<String, String> {
         };
         return loginitems::remove_launcher(&app.login, platform, env);
     }
-    // Only a link of that name whose target is this program: a link of the person's own
-    // that happens to have the same name is not ours to delete.
-    let title = app.identity().title;
-    let script = unlink_script(title, &app.identity().program_file());
-    let path = std::env::temp_dir().join(format!(
-        "{}-unlink-{}.vbs",
-        app.identity().app,
-        std::process::id()
-    ));
-    std::fs::write(&path, vbs_bytes(&script)).map_err(|e| format!("cannot write a script: {e}"))?;
-    let ok = Command::new(system_program("wscript.exe")?)
-        .args(["//B", "//Nologo"])
-        .arg(&path)
-        .status()
-        .is_ok_and(|s| s.success());
-    let _ = std::fs::remove_file(&path);
-    if ok {
-        // A link of the person's own with that name is not ours and stays: the text does not
-        // claim that the desktop is free of any link of that name.
-        Ok(format!(
-            "no link \"{title}\" of ours is on the desktop (one that was is removed)\n"
-        ))
-    } else {
-        Err("the link on the desktop could not be checked".to_owned())
+    let desktop = desktop_folder(env, &RegExe(system_program("reg.exe")?))?;
+    remove_link_in(
+        &desktop,
+        app.identity().title,
+        &app.identity().program_file(),
+    )
+}
+
+/// Delete `<title>.lnk` in `desktop` when it points at the program `program`: a link of the
+/// person's own that has the same name is not ours to delete.
+fn remove_link_in(desktop: &Path, title: &str, program: &str) -> Result<String, String> {
+    crate::shell_link::remove_if_target(&desktop.join(desktop_link_name(title)), program)
+        .map_err(|e| format!("the link on the desktop could not be checked: {e}"))?;
+    // A link of the person's own with that name is not ours and stays: the text does not claim
+    // that the desktop is free of any link of that name.
+    Ok(format!(
+        "no link \"{title}\" of ours is on the desktop (one that was is removed)\n"
+    ))
+}
+
+/// The file name of the desktop link of the app: its title and `.lnk`.
+#[must_use]
+pub fn desktop_link_name(title: &str) -> String {
+    format!("{title}.lnk")
+}
+
+/// The link of the app: it starts `target` with `start --open`, minimized (the console of
+/// `start` closes by itself); the description names the app.
+#[must_use]
+pub fn app_link(app: &str, target: &Path) -> crate::shell_link::Link {
+    let target = target.to_string_lossy().into_owned();
+    // The folder by the text of the path: a Windows path, whatever system builds the link.
+    let working_dir = target
+        .rsplit_once(['\\', '/'])
+        .map(|(dir, _)| dir.to_owned())
+        .unwrap_or_default();
+    crate::shell_link::Link {
+        target,
+        arguments: "start --open".to_owned(),
+        working_dir,
+        description: format!("{app}: start the hub and open the page"),
+        show_command: 7,
     }
 }
 
-/// The script that deletes the link `<title>.lnk` of the desktop, only when it points at the
-/// program `program` (a link of the person's own that has the same name stays).
-#[must_use]
-pub fn unlink_script(title: &str, program: &str) -> String {
-    let len = program.len();
-    format!(
-        "Set shell = CreateObject(\"WScript.Shell\")\r\n\
-Set fso = CreateObject(\"Scripting.FileSystemObject\")\r\n\
-path = shell.SpecialFolders(\"Desktop\") & \"\\{title}.lnk\"\r\n\
-If fso.FileExists(path) Then\r\n\
-  If LCase(Right(shell.CreateShortcut(path).TargetPath, {len})) = \"{program}\" Then fso.DeleteFile path, True\r\n\
-End If\r\n"
-    )
-}
-
-/// The script that makes the link `<title>.lnk` on the desktop: it starts `target` with
-/// `start --open`; the description names the app.
-#[must_use]
-pub fn link_script(title: &str, app: &str, target: &str) -> String {
-    format!(
-        "Set link = CreateObject(\"WScript.Shell\").CreateShortcut(\
-CreateObject(\"WScript.Shell\").SpecialFolders(\"Desktop\") & \"\\{title}.lnk\")\r\n\
-link.TargetPath = \"{target}\"\r\n\
-link.Arguments = \"start --open\"\r\n\
-link.WindowStyle = 7\r\n\
-link.Description = \"{app}: start the hub and open the page\"\r\n\
-link.Save\r\n"
-    )
-}
-
 /// A link on the desktop (named by the title of the app) that starts the hub and opens the page.
+/// It is written as a file (`shell_link`), not through the script host, which an endpoint
+/// protection stops when an unsigned program starts it.
 fn shortcut(app: &Background<'_>, exe: &Path) -> Result<String, String> {
     if !cfg!(windows) {
         let platform =
             loginitems::Platform::current().ok_or("a launcher is not built for this system")?;
         return loginitems::launcher(&app.login, platform, exe, &Env::from_process());
     }
-    let text = exe.to_string_lossy();
-    if text.contains(['"', '\r', '\n']) {
-        return Err("the path of the program cannot be put in a link".to_owned());
-    }
-    let title = app.identity().title;
-    let app = app.identity().app;
-    let script = link_script(title, app, &text);
-    let dir = std::env::temp_dir();
-    let path = dir.join(format!("{app}-link-{}.vbs", std::process::id()));
-    std::fs::write(&path, vbs_bytes(&script)).map_err(|e| format!("cannot write a script: {e}"))?;
-    let ok = Command::new(system_program("wscript.exe")?)
-        .args(["//B", "//Nologo"])
-        .arg(&path)
-        .status()
-        .is_ok_and(|s| s.success());
-    let _ = std::fs::remove_file(&path);
-    if ok {
-        Ok(format!("a link \"{title}\" is on the desktop\n"))
-    } else {
-        Err("the desktop link could not be made".to_owned())
-    }
+    let env = Env::from_process();
+    let desktop = desktop_folder(&env, &RegExe(system_program("reg.exe")?))?;
+    make_link_in(&desktop, app.identity().title, app.identity().app, exe)
+}
+
+fn make_link_in(desktop: &Path, title: &str, app: &str, exe: &Path) -> Result<String, String> {
+    crate::shell_link::write(&desktop.join(desktop_link_name(title)), &app_link(app, exe))
+        .map_err(|e| format!("the desktop link could not be made: {e}"))?;
+    Ok(format!("a link \"{title}\" is on the desktop\n"))
 }
 
 #[cfg(test)]
@@ -1128,22 +1145,88 @@ mod tests {
         );
     }
 
-    /// The scripts of the desktop link say the title and the names of the app, and the program they
-    /// delete a link for is the app's.
+    /// The link says the names of the app and points at its program; only a link to the program of
+    /// the app is removed.
     #[test]
-    fn the_scripts_of_the_desktop_link_come_from_the_app() {
-        let make = link_script(IDENTITY.title, IDENTITY.app, r"C:\Apps\rules-hub.exe");
-        assert!(make.contains(r"\Rules.lnk"), "{make}");
-        assert!(make.contains(r#"link.TargetPath = "C:\Apps\rules-hub.exe""#));
-        assert!(make.contains("rules-desktop: start the hub and open the page"));
+    fn the_desktop_link_comes_from_the_app_and_only_ours_is_removed() {
+        let desktop = std::env::temp_dir().join(format!("appkit-hub-desk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&desktop);
+        std::fs::create_dir_all(&desktop).unwrap();
+        let exe = Path::new(r"C:\Apps\rules-hub.exe");
+        let text = make_link_in(&desktop, IDENTITY.title, IDENTITY.app, exe).unwrap();
+        assert!(text.contains("\"Rules\""), "{text}");
+        let link = desktop.join("Rules.lnk");
+        let bytes = std::fs::read(&link).unwrap();
+        assert_eq!(
+            crate::shell_link::target_path(&bytes).as_deref(),
+            Some(r"C:\Apps\rules-hub.exe")
+        );
+        let made = app_link(IDENTITY.app, exe);
+        assert_eq!(made.arguments, "start --open");
+        assert_eq!(made.working_dir, r"C:\Apps");
+        assert!(made.description.starts_with("rules-desktop:"));
+        assert!(!made.description.to_lowercase().contains("tasks"));
+
+        // A link of the person's own with the same name stays.
         let program = IDENTITY.program_file();
-        let remove = unlink_script(IDENTITY.title, &program);
-        assert!(remove.contains(r"\Rules.lnk"), "{remove}");
-        assert!(remove.contains(&format!("\"{program}\" Then fso.DeleteFile")));
-        assert!(remove.contains(&format!("{}))", program.len())));
-        for text in [&make, &remove] {
-            assert!(!text.to_lowercase().contains("tasks"), "{text}");
+        crate::shell_link::write(&link, &app_link("mine", Path::new(r"C:\Apps\editor.exe")))
+            .unwrap();
+        remove_link_in(&desktop, IDENTITY.title, &program).unwrap();
+        assert!(link.is_file());
+        // Ours goes.
+        make_link_in(&desktop, IDENTITY.title, IDENTITY.app, exe).unwrap();
+        remove_link_in(&desktop, IDENTITY.title, &program).unwrap();
+        assert!(!link.exists());
+        let _ = std::fs::remove_dir_all(&desktop);
+    }
+
+    /// `reg query` answers with this value for the desktop.
+    struct DesktopRegistry(Option<&'static str>);
+
+    impl Registry for DesktopRegistry {
+        fn run(&self, _args: &[OsString]) -> Result<RegOutput, String> {
+            Ok(match self.0 {
+                Some(data) => RegOutput {
+                    success: true,
+                    stdout: format!(
+                        "\r\n{SHELL_FOLDERS_KEY}\r\n    Desktop    REG_EXPAND_SZ    {data}\r\n\r\n"
+                    ),
+                    stderr: String::new(),
+                },
+                None => RegOutput {
+                    success: false,
+                    stdout: String::new(),
+                    stderr: "ERROR: not found".to_owned(),
+                },
+            })
         }
+    }
+
+    /// Windows paths: only absolute on Windows.
+    #[cfg(windows)]
+    #[test]
+    fn the_desktop_is_the_folder_the_registry_names_with_its_variables() {
+        let env = Env::from_pairs([("USERPROFILE", r"C:\Users\a b"), ("OneDrive", r"D:\OD")]);
+        let moved = desktop_folder(&env, &DesktopRegistry(Some(r"%OneDrive%\Desktop"))).unwrap();
+        assert_eq!(moved, PathBuf::from(r"D:\OD\Desktop"));
+        let plain = desktop_folder(&env, &DesktopRegistry(Some(r"C:\Desk"))).unwrap();
+        assert_eq!(plain, PathBuf::from(r"C:\Desk"));
+        // No value: the profile.
+        assert_eq!(
+            desktop_folder(&env, &DesktopRegistry(None)).unwrap(),
+            PathBuf::from(r"C:\Users\a b").join("Desktop")
+        );
+        // A value that cannot be used is an error, not the profile: a variable that is not set,
+        // a value reg.exe could not print, one that is not absolute.
+        for reg in [
+            DesktopRegistry(Some(r"%NOPE%\Desktop")),
+            DesktopRegistry(Some("C:\\M\u{FFFD}ller\\Desktop")),
+            DesktopRegistry(Some(r"Desktop")),
+        ] {
+            let err = desktop_folder(&env, &reg).unwrap_err();
+            assert!(err.contains("cannot be used"), "{err}");
+        }
+        assert!(desktop_folder(&Env::default(), &DesktopRegistry(None)).is_err());
     }
 
     #[test]
@@ -1230,20 +1313,6 @@ mod tests {
         } else {
             assert!(!file_is_held(&io_error(13)));
         }
-    }
-
-    #[test]
-    fn a_script_is_utf16_with_a_mark_so_a_non_ascii_path_survives() {
-        let bytes = vbs_bytes("\"C:\\Users\\Müller\\h.exe\"");
-        assert_eq!(&bytes[..2], &[0xFF, 0xFE]);
-        let units: Vec<u16> = bytes[2..]
-            .chunks(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
-            .collect();
-        assert_eq!(
-            String::from_utf16(&units).unwrap(),
-            "\"C:\\Users\\Müller\\h.exe\""
-        );
     }
 
     #[test]
