@@ -1181,8 +1181,10 @@ mod tests {
     }
 
     /// `reg query` answers with this value for the desktop.
+    #[cfg(windows)]
     struct DesktopRegistry(Option<&'static str>);
 
+    #[cfg(windows)]
     impl Registry for DesktopRegistry {
         fn run(&self, _args: &[OsString]) -> Result<RegOutput, String> {
             Ok(match self.0 {

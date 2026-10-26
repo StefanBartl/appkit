@@ -264,8 +264,10 @@ pub fn target_path(bytes: &[u8]) -> Option<String> {
         if w_at != 0 {
             let units: Vec<u16> = info
                 .get(w_at..)?
-                .chunks_exact(2)
-                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| u16::from_le_bytes(*c))
                 .take_while(|u| *u != 0)
                 .collect();
             return String::from_utf16(&units).ok();
@@ -371,8 +373,10 @@ mod tests {
         for text in [&link.description, &link.working_dir, &link.arguments] {
             let n = usize::from(read_u16(&bytes, at).unwrap());
             let units: Vec<u16> = bytes[at + 2..at + 2 + 2 * n]
-                .chunks_exact(2)
-                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| u16::from_le_bytes(*c))
                 .collect();
             assert_eq!(&String::from_utf16(&units).unwrap(), text);
             at += 2 + 2 * n;
