@@ -6,7 +6,7 @@
 # `:MyPlugins runner start appkit`). Without a running runner a push stays "Queued" (no red mark, discarded after 24 h).
 # Only for PRIVATE repos with trusted authors; no `pull_request` trigger on purpose (a PR would run its own workflow
 # with the author's rights on this machine). Windows only: the Linux legs of the former matrix are gone, and so is
-# ShellCheck (not on the runner): the shell scripts of release-kit are checked by the Linux tests no more.
+# The Linux legs are gone; ShellCheck of the release-kit shell scripts runs on the runner.
 #
 # The tools (cargo, rustfmt, clippy, cargo-audit, cargo-deny, pnpm, python) are expected on the runner's PATH and are
 # not pinned here; the jobs print their versions.
@@ -86,6 +86,10 @@ jobs:
       - run: python -m unittest discover -s release-kit -p "test_*.py" -v
         env:
           PSModulePath: C:\Program Files\WindowsPowerShell\Modules;C:\Windows\system32\WindowsPowerShell\v1.0\Modules
+      # The scripts every release of every app carries: no finding of ShellCheck (any level; on the runner via
+      # `scoop install shellcheck`) and, below, of PSScriptAnalyzer.
+      - name: shellcheck on the shell scripts
+        run: shellcheck release-kit/scripts/install.sh release-kit/publish.sh release-kit/prepare.sh
       # install.ps1: no finding of PSScriptAnalyzer (errors, warnings and information).
       - name: PSScriptAnalyzer on install.ps1
         shell: pwsh
