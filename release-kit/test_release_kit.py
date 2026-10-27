@@ -11,13 +11,16 @@ publish.sh need a POSIX shell (Git Bash on Windows).
 from __future__ import annotations
 
 import hashlib
+import http.server
 import io
+import json
 import os
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import unittest
 import zipfile
 from pathlib import Path
@@ -148,6 +151,64 @@ def values(**over: str) -> dict[str, str]:
     }
     base.update(over)
     return base
+
+
+class FakeGitHub:
+    """A local server that answers like the GitHub API of a private repository, redirect included.
+
+    The release by tag lists the assets; an asset address answers 302 to a "storage" address (what the
+    real API does, to another host) and only to the right token; the storage address answers the bytes
+    and must never see the token. `requests` logs (path, Authorization header) of every request.
+    Real HTTP, because the faked cmdlets of the other tests cannot show how a PowerShell treats a 302.
+    """
+
+    def __init__(self, token: str, repo: str, tag: str, files: dict[str, bytes], redirect: bool = True) -> None:
+        self.requests: list[tuple[str, str | None]] = []
+        outer = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args: object) -> None:
+                pass
+
+            def reply(self, code: int, body: bytes = b"", **headers: str) -> None:
+                self.send_response(code)
+                for key, value in headers.items():
+                    self.send_header(key.replace("_", "-"), value)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self) -> None:  # noqa: N802
+                auth = self.headers.get("Authorization")
+                outer.requests.append((self.path, auth))
+                if self.path == f"/repos/{repo}/releases/tags/{tag}":
+                    assets = [{"name": name, "url": f"{outer.base}/assets/{name}"} for name in files]
+                    self.reply(200, json.dumps({"tag_name": tag, "assets": assets}).encode(),
+                               Content_Type="application/json")
+                elif self.path.startswith("/assets/"):
+                    name = self.path.rsplit("/", 1)[1]
+                    if auth != f"Bearer {token}":
+                        self.reply(401)
+                    elif not redirect:
+                        self.reply(200, files[name], Content_Type="application/octet-stream")
+                    else:
+                        self.reply(302, Location=f"{outer.base}/storage/{self.path.rsplit('/', 1)[1]}")
+                elif self.path.startswith("/storage/"):
+                    name = self.path.rsplit("/", 1)[1]
+                    if name in files:
+                        self.reply(200, files[name], Content_Type="application/octet-stream")
+                    else:
+                        self.reply(404)
+                else:
+                    self.reply(404)
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def stop(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
 
 
 class ManifestsTest(unittest.TestCase):
@@ -529,8 +590,11 @@ class InstallPs1Test(unittest.TestCase):
         full = dict(os.environ, OUT=str(self.out), FAKE_EXIT=fake_exit)
         full.update(env)
         command = f"{prelude}& '{script}' {args} -AllowElevated"
+        # errors="replace": a PowerShell on a German system writes its messages in the OEM code page, and a
+        # test that only wants the exit code must not die on an umlaut before it can say what failed.
         return subprocess.run([shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                               "-Command", command], capture_output=True, text=True, env=full, cwd=cwd)
+                               "-Command", command], capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", env=full, cwd=cwd)
 
     def fake(self, name: str) -> Path:
         path = self.tmp / name
@@ -675,6 +739,60 @@ class InstallPs1Test(unittest.TestCase):
             base = "https://github.com/Owner/app-repo/releases/download/v1.2.3/"
             self.assertEqual(self.urls(), [base + "demo-1.2.3-setup.cmd", base + "SHA256SUMS"])
             self.assertEqual(self.out_text(), "/S")
+
+    def test_a_token_follows_the_redirect_of_the_api_in_every_powershell(self) -> None:
+        # A private repository: each asset comes through the API, which answers 302 to the storage
+        # host. Windows PowerShell 5.1 throws for `-MaximumRedirection 0` without handing over the
+        # response (found 2026-10-27, installing a private release with GH_TOKEN); PowerShell 7 does
+        # not. The token goes to the API and never to the storage address.
+        self.fixtures("demo-1.2.3-setup.cmd")
+        folder = self.tmp / "fixtures"
+        files = {p.name: p.read_bytes() for p in folder.iterdir()}
+        server = FakeGitHub("secret-token", "Owner/app-repo", "v1.2.3", files)
+        self.addCleanup(server.stop)
+        script = self.stamped(channel="v1.2.3", kind="nsis", program="", release_asset="demo-{version}-setup.cmd")
+        for shell in self.each_shell():
+            server.requests.clear()
+            res = self.run_ps(shell, script, f"-ApiUrl {server.base}", GH_TOKEN="secret-token")
+            self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+            self.assertEqual(self.out_text(), "/S")
+            storage = [auth for path, auth in server.requests if path.startswith("/storage/")]
+            self.assertEqual(len(storage), 2, server.requests)  # the setup and SHA256SUMS
+            self.assertEqual(storage, [None, None], "the token went to the storage address")
+            api = [auth for path, auth in server.requests if not path.startswith("/storage/")]
+            self.assertTrue(api and all(a == "Bearer secret-token" for a in api), server.requests)
+
+    def test_a_token_reads_a_file_the_api_sends_without_a_redirect(self) -> None:
+        self.fixtures("demo-1.2.3-setup.cmd")
+        files = {p.name: p.read_bytes() for p in (self.tmp / "fixtures").iterdir()}
+        server = FakeGitHub("secret-token", "Owner/app-repo", "v1.2.3", files, redirect=False)
+        self.addCleanup(server.stop)
+        script = self.stamped(channel="v1.2.3", kind="nsis", program="", release_asset="demo-{version}-setup.cmd")
+        for shell in self.each_shell():
+            server.requests.clear()
+            res = self.run_ps(shell, script, f"-ApiUrl {server.base}", GH_TOKEN="secret-token")
+            self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+            self.assertEqual(self.out_text(), "/S")
+            self.assertFalse([p for p, _ in server.requests if p.startswith("/storage/")], server.requests)
+
+    def test_a_wrong_token_installs_nothing(self) -> None:
+        self.fixtures("demo-1.2.3-setup.cmd")
+        files = {p.name: p.read_bytes() for p in (self.tmp / "fixtures").iterdir()}
+        server = FakeGitHub("right-token", "Owner/app-repo", "v1.2.3", files)
+        self.addCleanup(server.stop)
+        script = self.stamped(channel="v1.2.3", kind="nsis", program="", release_asset="demo-{version}-setup.cmd")
+        for shell in self.each_shell():
+            res = self.run_ps(shell, script, f"-ApiUrl {server.base}", GH_TOKEN="wrong-token")
+            self.assertNotEqual(res.returncode, 0)
+            self.assertEqual(self.out_text(), "")
+
+    def test_the_api_address_is_https_or_local(self) -> None:
+        # The token goes there: never plain http to another host.
+        for shell in self.each_shell():
+            for bad in ("http://example.com", "ftp://127.0.0.1", "http://localhost.evil.test"):
+                res = self.run_ps(shell, PS1, f"-Repo Owner/app-repo -Kind nsis -ApiUrl {bad}", GH_TOKEN="t")
+                self.assertNotEqual(res.returncode, 0, bad)
+                self.assertIn("-ApiUrl must be an https address", res.stdout + res.stderr, bad)
 
     def test_a_rolling_build_named_by_its_system(self) -> None:
         self.fixtures("demo-x86_64-pc-windows-msvc-setup.cmd")

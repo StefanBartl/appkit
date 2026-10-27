@@ -17,3 +17,13 @@ kit), and its CI checks that the two pins name one commit.
 5. **Every app takes a fix of the guard.** A change to the guard, the pairing, the sessions or the
    limits that closes a hole is taken by every app that uses the kit, not only by the one that found
    it: the change names the apps and their tasks.
+6. **Move the apps with one command.** An app pins the tag in several places that must agree (the
+   `uses:` lines of its workflows, `tools/release-kit.pin`, and for the two hub apps `Cargo.toml`,
+   `ui/package.json` and both lock files). `python tools/bump-apps.py vX.Y.Z` edits all of them in
+   `ai-desktop`, `docmap-desktop`, `tasks-desktop` and `rules-desktop` (`--apps a,b` for some,
+   `--dry-run` to look first, `--commit` to also commit each app; it never pushes), refreshes the lock
+   files, and runs each app's own pin check. It refuses a tag that is not on origin, and skips an app
+   whose files to edit hold uncommitted work. Then push each app and watch its CI.
+
+   While working on appkit and an app at the same time, do not bump at all: use a `[patch]` in an
+   uncommitted `.cargo/config.toml` of the app (README of appkit). Tag and bump when the change is done.

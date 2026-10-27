@@ -39,6 +39,9 @@ Parameters (all optional):
                       what the release workflow stamps into this copy; given here, they win (for a
                       copy that is not stamped). -ReleaseAsset may hold {version} (the tag without
                       its v) and {triple} (x86_64-pc-windows-msvc).
+  -ApiUrl URL         the GitHub API (default https://api.github.com); only https, or a local address
+                      (the tests of release-kit run it against a server of their own). A token in
+                      GH_TOKEN is sent to this address and nowhere else.
 
 .EXAMPLE
 .\install.ps1 -InstallArgs '--autostart'
@@ -61,7 +64,8 @@ Parameters (all optional):
         [string] $Kind = '',
         [string] $Program = '',
         [string] $ReleaseAsset = '',
-        [string] $RollingAsset = ''
+        [string] $RollingAsset = '',
+        [string] $ApiUrl = 'https://api.github.com'
     )
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
@@ -96,32 +100,63 @@ Parameters (all optional):
     # to the storage host the API redirects to.
     $token = ''
     if ($env:GH_TOKEN) { $token = $env:GH_TOKEN } elseif ($env:GITHUB_TOKEN) { $token = $env:GITHUB_TOKEN }
+    # The token goes to this address: https, or a loopback address (tests), never plain http to another host.
+    $ApiUrl = $ApiUrl.TrimEnd('/')
+    if ($ApiUrl -cnotmatch '^(https://|http://(127\.0\.0\.1|localhost)(:[0-9]+)?(/|\z))') {
+        Exit-Install "-ApiUrl must be an https address (or a local one): $ApiUrl"
+    }
     $apiHeaders = @{ 'User-Agent' = 'release-kit-install' }
     if ($token -ne '') { $apiHeaders['Authorization'] = "Bearer $token" }
+
+    # One request to the address of an asset at the API, without following a redirect: the API answers 302 to
+    # the storage host, and the token must not go along. No cmdlet does this the same way in both PowerShells
+    # (`-MaximumRedirection 0` throws in Windows PowerShell 5.1 without handing over the response), so
+    # HttpWebRequest, which both have. Returns the address to go to, or '' when the file itself came in this
+    # answer (written to $OutFile).
+    function Get-AssetRedirect([string] $Url, [hashtable] $Headers, [string] $OutFile) {
+        $request = [System.Net.HttpWebRequest]::Create($Url)
+        $request.AllowAutoRedirect = $false
+        $request.Method = 'GET'
+        $request.UserAgent = $Headers['User-Agent']
+        $request.Accept = $Headers['Accept']
+        $request.Headers['Authorization'] = $Headers['Authorization']
+        try { $response = $request.GetResponse() }
+        catch [System.Net.WebException] {
+            $response = $_.Exception.Response
+            if (-not $response) { throw }
+        }
+        try {
+            $code = [int] $response.StatusCode
+            if ($code -ge 300 -and $code -lt 400) {
+                $location = [string] $response.Headers['Location']
+                if ($location -eq '') { throw "the answer of $Url is a redirect without a Location" }
+                # a relative Location is relative to the address that answered
+                return (New-Object System.Uri (New-Object System.Uri $Url), $location).AbsoluteUri
+            }
+            if ($code -lt 200 -or $code -ge 300) { throw "the answer of $Url is $code" }
+            $stream = $response.GetResponseStream()
+            try {
+                $file = [System.IO.File]::Create($OutFile)
+                try { $stream.CopyTo($file) } finally { $file.Dispose() }
+            }
+            finally { $stream.Dispose() }
+            return ''
+        }
+        finally { $response.Dispose() }
+    }
 
     function Get-ReleaseFile([string] $From, [string] $Channel, [string] $Name, [string] $OutFile) {
         if ($token -eq '') {
             Invoke-WebRequest -Uri "https://github.com/$From/releases/download/$Channel/$Name" -OutFile $OutFile -UseBasicParsing
             return
         }
-        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$From/releases/tags/$Channel" -Headers $apiHeaders -UseBasicParsing
+        $release = Invoke-RestMethod -Uri "$ApiUrl/repos/$From/releases/tags/$Channel" -Headers $apiHeaders -UseBasicParsing
         $asset = @($release.assets | Where-Object { $_.name -ceq $Name }) | Select-Object -First 1
         if (-not $asset) { throw "the release $Channel of $From has no file $Name" }
         $headers = @{} + $apiHeaders
         $headers['Accept'] = 'application/octet-stream'
-        $location = ''
-        try {
-            Invoke-WebRequest -Uri $asset.url -Headers $headers -OutFile $OutFile -UseBasicParsing -MaximumRedirection 0 -ErrorAction Stop
-            return
-        }
-        catch {
-            $response = $_.Exception.PSObject.Properties['Response']
-            if (-not ($response -and $response.Value)) { throw }
-            $found = $response.Value.Headers.Location
-            if (-not $found) { $found = $response.Value.Headers['Location'] }
-            $location = [string] ($found | Select-Object -First 1)
-            if ($location -eq '') { throw }
-        }
+        $location = Get-AssetRedirect -Url $asset.url -Headers $headers -OutFile $OutFile
+        if ($location -eq '') { return }
         Invoke-WebRequest -Uri $location -OutFile $OutFile -UseBasicParsing
     }
 
@@ -172,7 +207,7 @@ Parameters (all optional):
             if ($channel -eq '') {
                 Write-Output "looking for the newest release of $repo"
                 try {
-                    $newest = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers $apiHeaders -UseBasicParsing
+                    $newest = Invoke-RestMethod -Uri "$ApiUrl/repos/$repo/releases/latest" -Headers $apiHeaders -UseBasicParsing
                     $channel = [string] $newest.tag_name
                 }
                 catch {
