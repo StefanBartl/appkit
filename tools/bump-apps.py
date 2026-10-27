@@ -45,8 +45,9 @@ APPS = {
 
 TAG = re.compile(r"^v\d+\.\d+\.\d+$")
 USES = re.compile(r"(uses:\s*WKDSteve/appkit/release-kit/[A-Za-z0-9_./-]+@)[0-9a-f]{40}([ \t]*#[ \t]*)v\d+\.\d+\.\d+")
-PIN_TAG = re.compile(r"^(tag\s*=\s*)v\d+\.\d+\.\d+[ \t]*$", re.M)
-PIN_COMMIT = re.compile(r"^(commit\s*=\s*)[0-9a-f]{40}[ \t]*$", re.M)
+# (?=[ \t]*\r?$): the line may end in CRLF, and the end of the line is not part of what is replaced
+PIN_TAG = re.compile(r"^(tag\s*=\s*)v\d+\.\d+\.\d+(?=[ \t]*\r?$)", re.M)
+PIN_COMMIT = re.compile(r"^(commit\s*=\s*)[0-9a-f]{40}(?=[ \t]*\r?$)", re.M)
 CARGO = re.compile(r'(git\s*=\s*"https://github\.com/WKDSteve/appkit",\s*tag\s*=\s*")v\d+\.\d+\.\d+(")')
 UI = re.compile(r"(github:WKDSteve/appkit#)v\d+\.\d+\.\d+(&path:ui-kit)")
 
@@ -69,6 +70,13 @@ def bump_package_json(text: str, tag: str, _sha: str) -> tuple[str, int]:
     return UI.subn(lambda m: f"{m.group(1)}{tag}{m.group(2)}", text)
 
 
+def read_exact(path: Path) -> str:
+    """The text with its line endings as they are: read_text would turn CRLF into LF, and writing it back
+    would change every line of the file."""
+    with open(path, encoding="utf-8", newline="") as handle:
+        return handle.read()
+
+
 def plan(app: Path, mode: str, tag: str, sha: str) -> tuple[dict[Path, str], list[str]]:
     """The new text of every file that changes, and what is wrong (a place that should hold a pin and does not)."""
     changes: dict[Path, str] = {}
@@ -79,7 +87,7 @@ def plan(app: Path, mode: str, tag: str, sha: str) -> tuple[dict[Path, str], lis
             if required:
                 problems.append(f"{path}: not there")
             return
-        old = path.read_text(encoding="utf-8")
+        old = read_exact(path)
         new, count = fn(old, tag, sha)
         if count == 0 and required:
             problems.append(f"{path}: no pin of appkit found in it")
@@ -89,7 +97,7 @@ def plan(app: Path, mode: str, tag: str, sha: str) -> tuple[dict[Path, str], lis
     workflows = sorted((app / ".github" / "workflows").glob("*.y*ml"))
     for wf in workflows:
         apply(wf, bump_workflow, required=False)
-    if not any(USES.search(wf.read_text(encoding="utf-8")) for wf in workflows):
+    if not any(USES.search(read_exact(wf)) for wf in workflows):
         problems.append(f"{app}: no workflow takes an action of the release-kit")
     apply(app / "tools" / "release-kit.pin", bump_pin, required=(mode == "kit"))
     if mode == "full":
@@ -134,12 +142,15 @@ def resolve_tag(appkit: Path, tag: str) -> str:
     return local
 
 
-def run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
+def run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None, secret: str = "") -> None:
+    """Run a command; on failure raise with the last lines of its output, `secret` (a token) replaced by ***."""
     print(f"    $ {' '.join(cmd)}   (in {cwd.name})")
     res = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res.returncode != 0:
-        tail = (res.stdout + res.stderr).strip().splitlines()[-12:]
-        raise RuntimeError("failed:\n      " + "\n      ".join(tail))
+        output = (res.stdout + res.stderr).strip()
+        if secret:
+            output = output.replace(secret, "***")
+        raise RuntimeError("failed:\n      " + "\n      ".join(output.splitlines()[-12:]))
 
 
 def refresh_locks(app: Path) -> None:
@@ -155,7 +166,7 @@ def refresh_locks(app: Path) -> None:
     with tempfile.TemporaryDirectory() as folder:
         rc = Path(folder) / "pnpm-auth.npmrc"
         rc.write_text(f"//codeload.github.com/:_authToken={token}\n", encoding="utf-8")
-        run([pnpm, "install"], app / "ui", dict(os.environ, NPM_CONFIG_USERCONFIG=str(rc)))
+        run([pnpm, "install"], app / "ui", dict(os.environ, NPM_CONFIG_USERCONFIG=str(rc)), secret=token)
 
 
 def bump_app(name: str, repos: Path, tag: str, sha: str, args: argparse.Namespace) -> bool:
@@ -197,7 +208,9 @@ def bump_app(name: str, repos: Path, tag: str, sha: str, args: argparse.Namespac
     if args.commit:
         files = [os.path.relpath(p, app) for p in targets if p.exists()]
         git(app, "add", "--", *files)
-        git(app, "commit", "-m", f"chore(appkit): {tag} (release-kit actions, pins and lock files together; tools/bump-apps.py of appkit)")
+        # with the paths: only these files, whatever else the person has staged in the app stays staged
+        git(app, "commit", "-m", f"chore(appkit): {tag} (release-kit actions, pins and lock files together; tools/bump-apps.py of appkit)",
+            "--", *files)
         print("   committed (not pushed)")
     return True
 

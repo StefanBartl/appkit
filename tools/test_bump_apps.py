@@ -200,6 +200,39 @@ class BumpAppTest(unittest.TestCase):
         self.assertTrue(bump.bump_app("ai-desktop", self.tmp, "v0.23.2", NEW_SHA, self.args))
         self.assertEqual(self.git(app, "status", "--porcelain").strip(), "")
 
+    def test_line_endings_of_the_files_stay_as_they_are(self) -> None:
+        # A CRLF file must not be rewritten as LF (a diff of every line) and its pin lines must still be found.
+        app = self.repo("ai-desktop", full=False)
+        for path in (app / ".github" / "workflows" / "rolling.yml", app / "tools" / "release-kit.pin"):
+            path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+        self.git(app, "-c", "core.autocrlf=false", "commit", "-q", "-am", "crlf")
+        with mock.patch.object(bump, "run"):
+            self.assertTrue(bump.bump_app("ai-desktop", self.tmp, "v0.23.2", NEW_SHA, self.args))
+        for path in (app / ".github" / "workflows" / "rolling.yml", app / "tools" / "release-kit.pin"):
+            data = path.read_bytes()
+            self.assertIn(NEW_SHA.encode(), data)
+            self.assertEqual(data.count(b"\n"), data.count(b"\r\n"), f"{path.name} lost its CRLF")
+        diff = self.git(app, "-c", "core.autocrlf=false", "diff", "--numstat")
+        self.assertEqual(sum(int(line.split()[0]) for line in diff.splitlines()), 4, diff)  # 2 + 2 lines, not whole files
+
+    def test_a_commit_takes_only_the_files_of_the_bump(self) -> None:
+        # Something the person had staged in the app is not swept into the bump commit.
+        app = self.repo("ai-desktop", full=False)
+        (app / "other.txt").write_text("not mine\n")
+        self.git(app, "add", "other.txt")
+        self.args.commit = True
+        with mock.patch.object(bump, "run"):
+            self.assertTrue(bump.bump_app("ai-desktop", self.tmp, "v0.23.2", NEW_SHA, self.args))
+        self.assertNotIn("other.txt", self.git(app, "show", "--name-only", "--format=", "HEAD"))
+        self.assertIn("A  other.txt", self.git(app, "status", "--porcelain"))
+
+    def test_the_token_is_not_printed_when_a_command_fails(self) -> None:
+        with self.assertRaises(RuntimeError) as caught:
+            bump.run([sys.executable, "-c", "import sys; print('//codeload.github.com/:_authToken=s3cret-token'); sys.exit(1)"],
+                     self.tmp, secret="s3cret-token")
+        self.assertNotIn("s3cret-token", str(caught.exception))
+        self.assertIn("***", str(caught.exception))
+
     def test_an_app_that_is_already_there_is_ok(self) -> None:
         self.repo("ai-desktop", full=False)
         with mock.patch.object(bump, "run"):
