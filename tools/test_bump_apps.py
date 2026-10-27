@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location("bump_apps", Path(__file__).with_name("bump-apps.py"))
 bump = importlib.util.module_from_spec(SPEC)
@@ -128,6 +129,83 @@ class DirtyTest(unittest.TestCase):
         (self.tmp / "a.txt").write_text("changed\n")
         self.assertEqual(bump.dirty_files(self.tmp, [self.tmp / "a.txt", self.tmp / "b.txt"]), ["a.txt"])
         self.assertEqual(bump.dirty_files(self.tmp, [self.tmp / "b.txt"]), [])
+
+
+class BumpAppTest(unittest.TestCase):
+    """bump_app end to end in throw-away git repositories; the lock refresh and the pin check are replaced."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.args = type("Args", (), {"dry_run": False, "commit": False, "no_lock": False})()
+
+    def git(self, app: Path, *args: str) -> str:
+        res = subprocess.run(["git", "-C", str(app), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                             check=True, capture_output=True, text=True)
+        return res.stdout
+
+    def repo(self, name: str, full: bool) -> Path:
+        app = make_app(self.tmp, name, full)
+        self.git(app, "init", "-q")
+        self.git(app, "add", ".")
+        self.git(app, "commit", "-q", "-m", "start")
+        return app
+
+    def test_a_kit_app_is_bumped_checked_and_committed(self) -> None:
+        app = self.repo("ai-desktop", full=False)
+        self.args.commit = True
+        with mock.patch.object(bump, "run") as run:
+            self.assertTrue(bump.bump_app("ai-desktop", self.tmp, "v0.23.2", NEW_SHA, self.args))
+        self.assertIn(f"@{NEW_SHA} # v0.23.2", (app / ".github" / "workflows" / "rolling.yml").read_text())
+        self.assertEqual(self.git(app, "status", "--porcelain").strip(), "")
+        self.assertEqual(len(self.git(app, "log", "--oneline").splitlines()), 2)
+        self.assertEqual(run.call_args.args[0][-1], str(Path("tools") / "check-release-kit-pin.py"))
+
+    def test_a_full_app_refreshes_the_locks_and_runs_its_own_check(self) -> None:
+        app = self.repo("tasks-desktop", full=True)
+        with mock.patch.object(bump, "run") as run, mock.patch.object(bump, "refresh_locks") as refresh:
+            self.assertTrue(bump.bump_app("tasks-desktop", self.tmp, "v0.23.2", NEW_SHA, self.args))
+        refresh.assert_called_once_with(app)
+        self.assertEqual(run.call_args.args[0][-1], str(Path("tools") / "check-appkit-pin.py"))
+        self.assertIn('tag = "v0.23.2"', (app / "Cargo.toml").read_text())
+
+    def test_a_failing_lock_refresh_is_a_failure_and_leaves_the_edits_uncommitted(self) -> None:
+        app = self.repo("tasks-desktop", full=True)
+        self.args.commit = True
+        with mock.patch.object(bump, "run"), mock.patch.object(bump, "refresh_locks", side_effect=RuntimeError("no network")):
+            self.assertFalse(bump.bump_app("tasks-desktop", self.tmp, "v0.23.2", NEW_SHA, self.args))
+        self.assertEqual(len(self.git(app, "log", "--oneline").splitlines()), 1, "nothing was committed")
+        self.assertIn("Cargo.toml", self.git(app, "status", "--porcelain"))
+
+    def test_a_failing_pin_check_is_a_failure_and_commits_nothing(self) -> None:
+        app = self.repo("ai-desktop", full=False)
+        self.args.commit = True
+        with mock.patch.object(bump, "run", side_effect=RuntimeError("pins differ")):
+            self.assertFalse(bump.bump_app("ai-desktop", self.tmp, "v0.23.2", NEW_SHA, self.args))
+        self.assertEqual(len(self.git(app, "log", "--oneline").splitlines()), 1)
+
+    def test_uncommitted_work_in_a_file_to_edit_skips_the_app_untouched(self) -> None:
+        app = self.repo("ai-desktop", full=False)
+        mine = app / ".github" / "workflows" / "rolling.yml"
+        mine.write_text(WORKFLOW + "# someone else's work\n", encoding="utf-8", newline="")
+        with mock.patch.object(bump, "run") as run:
+            self.assertFalse(bump.bump_app("ai-desktop", self.tmp, "v0.23.2", NEW_SHA, self.args))
+        run.assert_not_called()
+        self.assertEqual(mine.read_text(), WORKFLOW + "# someone else's work\n", "the file was not touched")
+        self.assertIn(OLD_SHA, (app / "tools" / "release-kit.pin").read_text(), "no other file was touched either")
+
+    def test_dry_run_writes_nothing(self) -> None:
+        app = self.repo("ai-desktop", full=False)
+        self.args.dry_run = True
+        self.assertTrue(bump.bump_app("ai-desktop", self.tmp, "v0.23.2", NEW_SHA, self.args))
+        self.assertEqual(self.git(app, "status", "--porcelain").strip(), "")
+
+    def test_an_app_that_is_already_there_is_ok(self) -> None:
+        self.repo("ai-desktop", full=False)
+        with mock.patch.object(bump, "run"):
+            self.assertTrue(bump.bump_app("ai-desktop", self.tmp, "v0.23.2", NEW_SHA, self.args))
+            self.git(self.tmp / "ai-desktop", "commit", "-q", "-am", "bumped")
+            self.assertTrue(bump.bump_app("ai-desktop", self.tmp, "v0.23.2", NEW_SHA, self.args))
 
 
 class TagTest(unittest.TestCase):

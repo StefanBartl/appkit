@@ -20,6 +20,9 @@ skipped (another session's work is never swept into a bump commit). When done, e
 (tools/check-appkit-pin.py or tools/check-release-kit-pin.py); the exit code is 1 when one of them fails.
 For work on appkit and an app at the same time, do not bump: use a `[patch]` in an uncommitted
 .cargo/config.toml (see the CLAUDE.md of tasks-desktop).
+
+Not touched on purpose: the separate pin of the design tokens of docmap-desktop (tools/appkit-ui.pin, a checked-in
+copy of a file of appkit-ui at its own tag, moved by hand with tools/check-appkit-tokens.py).
 """
 
 from __future__ import annotations
