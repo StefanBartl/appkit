@@ -1,7 +1,9 @@
 // One explanation popup for the whole page. Any element with `data-hint="text"` gets it: on hover (after a short
 // delay) and on keyboard focus. It can be reached with the pointer (it stays while the pointer is on it) and goes
-// away with Escape, on scrolling and when the pointer or the focus leaves (WCAG 1.4.13). The text is set as text,
-// never as markup.
+// away with Escape, on scrolling and when the pointer or the focus leaves (WCAG 1.4.13). A press inside it keeps it
+// open (its text can be selected and copied) until a press outside or Escape. A popup that had to lie on a control
+// lets the pointer through (pointer-events: none), so the control under it is reached and its own hint shows. The
+// text is set as text, never as markup.
 
 /** What an app tells the popup: the name of its region, in the app's language (the kit has no words of its own). */
 export interface TooltipOptions {
@@ -22,7 +24,7 @@ export type Side = 'below' | 'above' | 'right' | 'left';
  * Where the popup goes: below the element, else above it, else to its right or left - the first place that fits in
  * the window and that `free` says covers no other control (a popup that stays while the pointer is on it would catch
  * the click meant for the control under it). When no place is free it goes below (above when there is no room below),
- * kept inside the window; a press on it then takes it away. With `only` it stays on that side (kept inside the window):
+ * kept inside the window; the pointer goes through it then (pointer-events: none). With `only` it stays on that side (kept inside the window):
  * a popup that follows a scrolling element does not jump from side to side.
  *
  * Since v0.14.0 a popup that fits neither below nor above goes to the right or left when that fits (before, it was
@@ -202,6 +204,8 @@ export function installTooltips(
   let viaFocus = false;
   // The button of the mouse is down: the focus that comes with it is the press, not the keyboard.
   let pressing = false;
+  // A press inside the popup keeps it: it goes with a press outside or Escape, not with the pointer or the focus.
+  let pinned = false;
   let showTimer: number | undefined;
   let hideTimer: number | undefined;
 
@@ -237,6 +241,8 @@ export function installTooltips(
     }
     current = null;
     viaFocus = false;
+    pinned = false;
+    tip.style.pointerEvents = '';
     tip.hidden = true;
     host.hidden = true;
     if (host.parentElement !== doc.body) doc.body.appendChild(host);
@@ -275,15 +281,19 @@ export function installTooltips(
     tip.style.left = '0px';
     tip.style.top = '0px';
     const size = tip.getBoundingClientRect();
+    const free = keepSide && side ? () => true : freeFor(el);
     const at = placeTip(
       { x: anchor.x, y: anchor.y, width: anchor.width, height: anchor.height },
       { width: size.width, height: size.height },
       { width: win.innerWidth, height: win.innerHeight },
       6,
-      keepSide && side ? () => true : freeFor(el),
+      free,
       keepSide ? side : undefined,
     );
     side = at.side;
+    // No free place: the popup lies on a control. The pointer goes through it, so that the control is pressed and
+    // its own hint shows (before, the popup stayed under the pointer and hid the next entry of a menu).
+    if (!keepSide && !pinned) tip.style.pointerEvents = free({ x: at.x, y: at.y, width: size.width, height: size.height }) ? '' : 'none';
     tip.style.left = `${at.x}px`;
     tip.style.top = `${at.y}px`;
   }
@@ -297,8 +307,10 @@ export function installTooltips(
     if (current !== el) describedBefore = el.getAttribute('aria-describedby');
     current = el;
     viaFocus = viaFocus || byFocus;
-    tip.replaceChildren();
     const title = el.dataset.hintTitle ?? '';
+    // A kept popup whose text did not change is left as it is: rebuilding it would drop the selection in it.
+    if (pinned && current === el && tip.textContent === title + text) return;
+    tip.replaceChildren();
     if (title !== '') {
       const heading = doc.createElement('strong');
       heading.className = 'hint-title';
@@ -318,6 +330,7 @@ export function installTooltips(
   }
 
   const onOver = (e: Event): void => {
+    if (pinned) return;
     if (e.target instanceof win.Node && tip.contains(e.target)) {
       cancelHide();
       return;
@@ -330,10 +343,13 @@ export function installTooltips(
     }
     cancelHide();
     if (el === current) return;
+    // The pointer is on another element: the popup of the one it left goes at once, it does not wait for the next.
+    if (current && !tip.hidden) hide();
     cancelShow();
     showTimer = win.setTimeout(() => show(el, false), hintDelay(el.dataset.hintDelay));
   };
   const onOut = (e: Event): void => {
+    if (pinned) return;
     cancelShow();
     if (!tip.hidden && (hintOf(e.target) || (e.target instanceof win.Node && tip.contains(e.target)))) {
       scheduleHide();
@@ -342,28 +358,33 @@ export function installTooltips(
   // A press of the mouse focuses what it hits, and the browser may scroll it into view while it does: a popup shown by that
   // focus would be placed for the element before the scroll and lie under the pointer, where it catches the click. A press
   // shows no popup; the pointer resting on the element does (hover), and the keyboard focus does at once.
-  // A press on the popup itself takes it away at once: it covers what the person meant to press (when it found no free
-  // place). That press is lost, the next one reaches the control.
+  // A press inside the popup keeps it open until a press outside (the text can be selected and copied); a press outside
+  // takes a kept popup away. A popup on a control never gets the press (pointer-events: none).
   const onDown = (e: Event): void => {
     pressing = true;
-    // The main button only: another one opens a menu of the browser, and nothing was meant to be pressed under it.
-    if ((e as MouseEvent).button === 0 && !tip.hidden && e.target instanceof win.Node && tip.contains(e.target)) {
-      hide();
-    }
+    // The main button only: another one opens a menu of the browser.
+    if ((e as MouseEvent).button !== 0 || tip.hidden) return;
+    if (e.target instanceof win.Node && tip.contains(e.target)) {
+      pinned = true;
+      cancelHide();
+    } else if (pinned) hide();
   };
   const onUp = (): void => {
     pressing = false;
   };
   const onFocusIn = (e: Event): void => {
-    if (pressing) return;
+    if (pressing || pinned) return;
     const el = hintOf(e.target);
     if (el) show(el, true);
   };
-  const onFocusOut = (): void => hide();
+  const onFocusOut = (): void => {
+    if (!pinned) hide();
+  };
   // A tap shows the popup at once: a touch screen has no hover to wait for, and not every browser focuses what is
   // tapped (a button on iOS). A click with a mouse or the keyboard does not: hover and focus did it already.
   const onClick = (e: Event): void => {
     if ((e as PointerEvent).pointerType !== 'touch') return;
+    if (e.target instanceof win.Node && tip.contains(e.target)) return;
     const el = hintOf(e.target);
     if (el) {
       cancelShow();
@@ -379,6 +400,8 @@ export function installTooltips(
   const onKey = (e: KeyboardEvent): void => {
     // A key after a press that never got its release (the button was let go outside the window) is the keyboard again.
     pressing = false;
+    // Tab is the keyboard again: a kept popup is a kept one no longer (Ctrl+C copies from it, Escape closes it below).
+    if (e.key === 'Tab' && pinned) hide();
     // The popup is closed by this Escape and by nothing else: it is not also the Escape of a dialog or a menu. A
     // modal dialog closes on Escape by its own default action (`cancel`), which `stopPropagation` does not stop.
     if (e.key === 'Escape' && !tip.hidden) {
@@ -387,8 +410,16 @@ export function installTooltips(
       e.preventDefault();
     }
   };
+  const onDialogClose = (e: Event): void => {
+    if (pinned && e.target instanceof win.Node && e.target.contains(host)) hide();
+  };
   const onScroll = (): void => {
     if (tip.hidden) return;
+    if (pinned) {
+      if (current?.isConnected) place(current, true);
+      else hide();
+      return;
+    }
     // The browser scrolls a focused element into view after `focusin`: the popup follows it. A scroll with the
     // pointer takes the popup away (it would stand where the element no longer is).
     if (viaFocus && current) place(current, true);
@@ -404,6 +435,7 @@ export function installTooltips(
   doc.addEventListener('keydown', onKey);
   doc.addEventListener('click', onClick);
   doc.addEventListener('scroll', onScroll, true);
+  doc.addEventListener('close', onDialogClose, true);
   return () => {
     hide();
     watchers.delete(onChange);
@@ -416,6 +448,7 @@ export function installTooltips(
     doc.removeEventListener('focusout', onFocusOut);
     doc.removeEventListener('keydown', onKey);
     doc.removeEventListener('scroll', onScroll, true);
+    doc.removeEventListener('close', onDialogClose, true);
     host.remove();
   };
 }

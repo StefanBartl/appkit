@@ -320,17 +320,25 @@ describe('the popup in a page', () => {
     expect(p.tip.textContent).toBe('First');
   });
 
-  it('goes at once when the popup itself is pressed (it lay on what the person meant to press)', () => {
+  it('stays when the popup itself is pressed (its text can be copied) and goes with a press outside', () => {
     const p = fakePage();
     const a = p.button({ 'data-hint': 'First' });
     p.fire('mouseover', a);
     vi.advanceTimersByTime(SHOW_DELAY_MS);
     expect(p.host.hidden).toBe(false);
     p.fire('mouseover', p.tip);
-    // Another button than the main one opens a menu of the browser: the popup stays.
+    // Another button than the main one opens a menu of the browser: nothing is kept by it.
     p.fire('mousedown', p.tip, { button: 2 });
-    expect(p.host.hidden).toBe(false);
+    p.fire('mouseout', p.tip);
+    vi.advanceTimersByTime(HIDE_DELAY_MS);
+    expect(p.host.hidden).toBe(true);
+    p.fire('mouseover', a);
+    vi.advanceTimersByTime(SHOW_DELAY_MS);
     p.fire('mousedown', p.tip, { button: 0 });
+    p.fire('mouseout', p.tip);
+    vi.advanceTimersByTime(HIDE_DELAY_MS * 4);
+    expect(p.host.hidden).toBe(false);
+    p.fire('mousedown', a, { button: 0 });
     expect(p.host.hidden).toBe(true);
   });
 
