@@ -18,6 +18,20 @@ and the same tests. It knows no app: an app brings its names, its routes and its
 | `ui-kit` (`appkit-ui`) | The browser side, Svelte 5 and TypeScript source: the design tokens and base rules, the menu bar, the multi-select, the info button, the markdown reader, the hint popup, the event-stream reader, the pairing code and the hidden-character guard. See [ui-kit/README.md](ui-kit/README.md). |
 | `release-kit` | How an app is published: GitHub Actions for the rolling build `latest` and the release drafts, and the install scripts (`install.ps1`, `install.sh`) every release carries, stamped with its channel. Any native app can use it, also one without the crates. See [release-kit/README.md](release-kit/README.md). |
 
+## What goes where
+
+An app and its web variant are one app with two builds, not two apps:
+
+| What | Where |
+|---|---|
+| The page of an app, the same for the hub and the web variant | its `*-desktop` repo, one source with two entry points (for tasks: `ui/src/main.ts` for the hub, `ui/src/main.web.ts` for the web variant) |
+| The built web variant | its `*-web` repo, release files only, no source. The page is one self-contained file that works on its own: download it, open it in the browser, pick the folder. |
+| Something a **second** app needs | here, in `ui-kit` or a crate |
+
+There is no shared repo per app family (such as `tasks-shared`): it would have one user, the app
+that already holds the code, and add a third chain of tags between the app and the kit. Code moves
+here when a second app needs it, not ahead of time.
+
 ## Using it
 
 There are no releases on crates.io. An app depends on a tag:
