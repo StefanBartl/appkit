@@ -55,7 +55,9 @@ A menu is a list of items; `{ kind: 'section', label }` starts a group with a he
 shortcut is shown on the right and announced (`aria-keyshortcuts`); the app binds the key itself. A menu may carry a `hint`, which the hint popup shows on its
 trigger in the bar (not while the menu is open: the popup would lie over its first items). An action, radio or check item may carry a `hint` too: it shows on hover and focus of the item (a disabled item gets no pointer events from the browser, so its hint shows on focus only). A menu with
 `mnemonic: 'p'` opens on Alt+P and shows the letter underlined. Inside an open menu the arrow keys, Home and End walk
-the items, a letter goes to the next item that starts with it, Left and Right change the menu, Escape closes.
+the items, a letter goes to the next item that starts with it, Left and Right change the menu, Escape closes. An action
+or radio item that shows something may carry `onopennew`: a middle click, Ctrl+click or Ctrl+Enter (Cmd on a Mac) calls
+it instead of `onselect`, the way a link opens in a new tab; without it these act as a plain choice.
 Alt+letter is left alone while a modal dialog is open or when another handler took the key; on a Mac, where Option+letter
 writes another character, the physical key counts. Changed since the first version of the menu: `MenuItem` has a
 member more (`section`), so an exhaustive `switch` over `kind` needs a case for it, and a separator at the start or the

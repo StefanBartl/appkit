@@ -124,3 +124,88 @@ describe('MenuBar keys', () => {
     expect(popup('project')).toBeNull();
   });
 });
+
+describe('MenuBar opens an item apart', () => {
+  const opened: string[] = [];
+  const apartMenus: Menu[] = [
+    {
+      id: 'view',
+      label: 'View',
+      items: [
+        {
+          kind: 'radio',
+          label: 'Plan',
+          checked: false,
+          onselect: () => picked.push('Plan'),
+          onopennew: () => opened.push('Plan'),
+        },
+        { kind: 'radio', label: 'Board', checked: true, onselect: () => picked.push('Board') },
+        {
+          kind: 'action',
+          label: 'Off',
+          disabled: true,
+          onselect: () => picked.push('Off'),
+          onopennew: () => opened.push('Off'),
+        },
+      ],
+    },
+  ];
+  const item = (label: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>('button.mb-item')].find((b) => b.textContent?.includes(label))!;
+  const mouse = (target: EventTarget, type: string, init: MouseEventInit): MouseEvent => {
+    const e = new MouseEvent(type, { bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(e);
+    return e;
+  };
+
+  beforeEach(async () => {
+    opened.length = 0;
+    if (app) await unmount(app);
+    document.body.innerHTML = '';
+    app = mount(MenuBar, { target: document.body, props: { menus: apartMenus, label: 'Menu', initialOpen: 'view' } });
+    flushSync();
+  });
+
+  it('a middle click opens it apart and closes the menu; its press starts no autoscroll', async () => {
+    expect(mouse(item('Plan'), 'mousedown', { button: 1 }).defaultPrevented).toBe(true);
+    expect(mouse(item('Plan'), 'auxclick', { button: 1 }).defaultPrevented).toBe(true);
+    await settle();
+    expect(opened).toEqual(['Plan']);
+    expect(picked).toEqual([]);
+    expect(popup('view')).toBeNull();
+  });
+
+  it('Ctrl+click and Cmd+click open it apart, a plain click chooses it', async () => {
+    mouse(item('Plan'), 'click', { button: 0, ctrlKey: true });
+    await settle();
+    await trigger('view').click();
+    await settle();
+    mouse(item('Plan'), 'click', { button: 0, metaKey: true });
+    await settle();
+    trigger('view').click();
+    await settle();
+    item('Plan').click();
+    expect(opened).toEqual(['Plan', 'Plan']);
+    expect(picked).toEqual(['Plan']);
+  });
+
+  it('Ctrl+Enter opens it apart from the keyboard', async () => {
+    const e = key(item('Plan'), 'Enter', { ctrlKey: true });
+    await settle();
+    expect(e.defaultPrevented).toBe(true);
+    expect(opened).toEqual(['Plan']);
+    expect(picked).toEqual([]);
+  });
+
+  it('an item without the way apart, and a disabled one, do nothing on a middle click; Ctrl+click chooses it', async () => {
+    expect(mouse(item('Board'), 'mousedown', { button: 1 }).defaultPrevented).toBe(false);
+    mouse(item('Board'), 'auxclick', { button: 1 });
+    mouse(item('Off'), 'auxclick', { button: 1 });
+    await settle();
+    expect(opened).toEqual([]);
+    expect(picked).toEqual([]);
+    expect(popup('view')).not.toBeNull();
+    mouse(item('Board'), 'click', { button: 0, ctrlKey: true });
+    expect(picked).toEqual(['Board']);
+  });
+});

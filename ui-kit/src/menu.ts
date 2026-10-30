@@ -4,14 +4,26 @@
 /**
  * An item that can be chosen may carry a `hint`: what it does or shows, in the hint popup (`tooltip.ts`) on hover and
  * focus of the item. A disabled button gets no pointer events from the browser, so its hint shows on focus only.
+ *
+ * An action or radio item that shows something may carry `onopennew`: the way a link opens in a new tab, a middle
+ * click, Ctrl+click (Cmd+click) or Ctrl+Enter (Cmd+Enter) on it calls that instead of `onselect` (the menu bar only).
  */
 export type MenuItem =
-  | { kind: 'action'; label: string; onselect: () => void; disabled?: boolean; shortcut?: string; hint?: string }
+  | {
+      kind: 'action';
+      label: string;
+      onselect: () => void;
+      onopennew?: () => void;
+      disabled?: boolean;
+      shortcut?: string;
+      hint?: string;
+    }
   | {
       kind: 'radio';
       label: string;
       checked: boolean;
       onselect: () => void;
+      onopennew?: () => void;
       disabled?: boolean;
       shortcut?: string;
       hint?: string;

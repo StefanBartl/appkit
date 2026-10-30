@@ -7,7 +7,7 @@
   // (a heading and a line), an item may show its shortcut on the right. Keys: Enter, Space or Down open a menu;
   // Up and Down walk the items; a letter goes to the next item that starts with it; Left and Right go to the next
   // menu; Escape closes; Alt+letter opens the menu whose `mnemonic` that is. The shortcut is only shown: the app
-  // binds the key itself.
+  // binds the key itself. An item with `onopennew` opens apart like a link: middle click, Ctrl+click, Ctrl+Enter.
 
   import { tick, untrack } from 'svelte';
   import { tooltip } from './tooltip';
@@ -79,6 +79,24 @@
     item.onselect();
   }
 
+  /** What an item opens apart (a new tab or window), or null: it has none, or it cannot be chosen now. */
+  function apart(item: MenuItem): (() => void) | null {
+    if ((item.kind !== 'action' && item.kind !== 'radio') || item.disabled || !item.onopennew) return null;
+    return item.onopennew;
+  }
+
+  /** Open the item apart, as a link does with a middle click or a modifier; false when it has no such way. */
+  function pickApart(item: MenuItem): boolean {
+    const open = apart(item);
+    if (!open) return false;
+    close(true);
+    open();
+    return true;
+  }
+
+  // Ctrl on Windows and Linux, Cmd on a Mac: the modifier of "open in a new tab".
+  const apartKey = (event: MouseEvent | KeyboardEvent): boolean => event.ctrlKey || event.metaKey;
+
   function onTriggerKey(event: KeyboardEvent, id: string): void {
     const list = triggers();
     const at = list.findIndex((t) => t.dataset.for === id);
@@ -120,7 +138,11 @@
     }
   }
 
-  function onItemKey(event: KeyboardEvent, id: string): void {
+  function onItemKey(event: KeyboardEvent, id: string, item: MenuItem): void {
+    if (event.key === 'Enter' && apartKey(event) && pickApart(item)) {
+      event.preventDefault();
+      return;
+    }
     const items = itemButtons(id);
     const at = items.indexOf(event.currentTarget as HTMLButtonElement);
     const focus = (i: number) => items[(i + items.length) % items.length]?.focus();
@@ -217,8 +239,17 @@
         disabled={(item.kind === 'action' || item.kind === 'radio') && item.disabled}
         tabindex="-1"
         use:tooltip={item.hint ?? ''}
-        onclick={() => pick(item)}
-        onkeydown={(e) => onItemKey(e, id)}
+        onclick={(e) => {
+          if (!(apartKey(e) && pickApart(item))) pick(item);
+        }}
+        onmousedown={(e) => {
+          // The middle button would start the browser's autoscroll on the page.
+          if (e.button === 1 && apart(item)) e.preventDefault();
+        }}
+        onauxclick={(e) => {
+          if (e.button === 1 && pickApart(item)) e.preventDefault();
+        }}
+        onkeydown={(e) => onItemKey(e, id, item)}
       >
         <span class="mb-mark" aria-hidden="true"
           >{item.kind === 'radio' ? (item.checked ? '●' : '') : item.kind === 'check' ? (item.checked ? '✓' : '') : ''}</span
