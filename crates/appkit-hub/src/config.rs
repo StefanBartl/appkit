@@ -599,7 +599,9 @@ mod tests {
 
     #[test]
     fn saving_writes_what_loading_reads_and_refuses_what_is_not_valid() {
-        let dir = Scratch::new("hub-save");
+        let scratch = Scratch::new("hub-save");
+        // A config folder that is not there yet: the save makes it.
+        let dir = scratch.join("config");
         let mut cfg = with_vaults(&[("native", abs())], Some("native"));
         cfg.port = Some(20000);
         save_file(&dir, &cfg).unwrap();
