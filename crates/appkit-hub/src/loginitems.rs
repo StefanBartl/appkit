@@ -271,6 +271,7 @@ pub fn remove_launcher(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use appkit_scratch::Scratch;
 
     /// An app that is not the one this kit was made from: nothing in the files may say "tasks".
     const IDENTITY: AppIdentity = AppIdentity {
@@ -338,12 +339,8 @@ mod tests {
         }
     }
 
-    fn temp(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("appkit-hub-login-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
+    fn temp(name: &str) -> Scratch {
+        Scratch::new(&format!("hub-login-{name}"))
     }
 
     #[test]

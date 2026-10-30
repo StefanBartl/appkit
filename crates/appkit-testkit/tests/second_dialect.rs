@@ -4,7 +4,7 @@
 //! The dialect is the one of `rules.nvim`: `rules.*` kinds, `RULES_VAULT`, its list under `rules`.
 //! The binary `fake-engine` of this kit plays it.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use appkit_hub::engine::{
@@ -12,6 +12,7 @@ use appkit_hub::engine::{
     ProbeProblem,
 };
 use appkit_hub::env::Env;
+use appkit_scratch::Scratch;
 use serde_json::{json, Value};
 
 static SPECS: [MethodSpec; 3] = [
@@ -34,13 +35,14 @@ const DIALECT: EngineDialect = EngineDialect {
     engine_name: "the rules.nvim checkout",
 };
 
-fn engine(env: Env) -> CliEngine {
-    let vault = std::env::temp_dir();
+/// The engine, with `vault` as its vault: a folder of the test's own (the fake engine writes nothing
+/// there, but it is no folder of anybody else either).
+fn engine(vault: &Path, env: Env) -> CliEngine {
     CliEngine::new(CliEngineConfig {
         dialect: DIALECT,
         nvim: PathBuf::from(env!("CARGO_BIN_EXE_fake-engine")),
         script: vault.join("scripts").join("rules.lua"),
-        vault,
+        vault: vault.to_path_buf(),
         lib_dir: None,
         extra_areas: vec!["ALL".to_owned()],
         env,
@@ -56,7 +58,8 @@ fn fake(value: Value) -> Value {
 
 #[tokio::test]
 async fn the_engine_of_the_second_app_is_probed_by_its_own_hello() {
-    let info = probe(&engine(Env::from_process()), &DIALECT)
+    let vault = Scratch::new("second-dialect");
+    let info = probe(&engine(&vault, Env::from_process()), &DIALECT)
         .await
         .expect("probe");
     assert_eq!(info.schemas, vec![1]);
@@ -68,11 +71,12 @@ async fn the_engine_of_the_second_app_is_probed_by_its_own_hello() {
 /// those things is too old, and the problem names what is missing.
 #[tokio::test]
 async fn an_engine_that_lacks_what_the_dialect_needs_is_too_old() {
+    let vault = Scratch::new("second-dialect");
     let needs_more = EngineDialect {
         required_capabilities: &["hello", "snapshot", "task"],
         ..DIALECT
     };
-    let err = probe(&engine(Env::from_process()), &needs_more)
+    let err = probe(&engine(&vault, Env::from_process()), &needs_more)
         .await
         .expect_err("too old");
     match err {
@@ -83,7 +87,8 @@ async fn an_engine_that_lacks_what_the_dialect_needs_is_too_old() {
 
 #[tokio::test]
 async fn it_answers_with_its_own_plugin_kind_and_list() {
-    let reply = engine(Env::from_process())
+    let vault = Scratch::new("second-dialect");
+    let reply = engine(&vault, Env::from_process())
         .call(SNAPSHOT, None)
         .await
         .expect("answer");
@@ -96,6 +101,7 @@ async fn it_answers_with_its_own_plugin_kind_and_list() {
 
 #[tokio::test]
 async fn the_child_gets_the_variables_of_its_own_dialect_and_none_of_the_other() {
+    let vault = Scratch::new("second-dialect");
     let env = Env::from_pairs([
         ("PATH", "C:/bin"),
         ("SystemRoot", "C:/Windows"),
@@ -103,7 +109,10 @@ async fn the_child_gets_the_variables_of_its_own_dialect_and_none_of_the_other()
         ("TASKS_EXTRA_AREAS", "ELSEWHERE"),
     ]);
     let params = fake(json!({ "echo_env": true }));
-    let reply = engine(env).call(LIST, Some(&params)).await.expect("answer");
+    let reply = engine(&vault, env)
+        .call(LIST, Some(&params))
+        .await
+        .expect("answer");
     let doc: Value = serde_json::from_str(&reply.text).unwrap();
     let names: Vec<&str> = doc["env"]
         .as_array()
@@ -123,8 +132,9 @@ async fn the_child_gets_the_variables_of_its_own_dialect_and_none_of_the_other()
 
 #[tokio::test]
 async fn a_refusal_is_the_error_kind_of_the_dialect() {
+    let vault = Scratch::new("second-dialect");
     let params = fake(json!({ "error": "invalid_argument" }));
-    let err = engine(Env::from_process())
+    let err = engine(&vault, Env::from_process())
         .call(LIST, Some(&params))
         .await
         .expect_err("refusal");
@@ -139,13 +149,14 @@ async fn a_refusal_is_the_error_kind_of_the_dialect() {
 
 #[tokio::test]
 async fn an_answer_of_the_other_dialect_is_a_protocol_error() {
+    let vault = Scratch::new("second-dialect");
     // The kind of the tasks engine, the schema of nobody: neither is what this engine promised.
     for params in [
         fake(json!({ "kind": "tasks.list" })),
         fake(json!({ "kind": "rules.snapshot" })),
         fake(json!({ "schema": 2 })),
     ] {
-        let err = engine(Env::from_process())
+        let err = engine(&vault, Env::from_process())
             .call(LIST, Some(&params))
             .await
             .expect_err("protocol");

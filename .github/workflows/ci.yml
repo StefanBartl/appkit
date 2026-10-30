@@ -46,7 +46,18 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # No Neovim is needed: the binary fake-engine of appkit-testkit stands in for an engine.
-      - run: cargo test --workspace --locked
+      # The tests get a temp dir of their own, empty at the start, and nothing may be left in it afterwards: a test
+      # takes its folder from appkit-scratch's `Scratch`, which removes it also when the test fails.
+      - name: cargo test (nothing left in the temp dir)
+        run: |
+          t="$RUNNER_TEMP/appkit-test-temp"
+          rm -rf "$t" && mkdir -p "$t"
+          TEMP="$t" TMP="$t" TMPDIR="$t" cargo test --workspace --locked
+          left="$(ls -A "$t")"
+          if [ -n "$left" ]; then
+            printf 'the tests left this in the temp dir:\n%s\n' "$left"
+            exit 1
+          fi
 
   supply-chain:
     runs-on: [self-hosted, windows]

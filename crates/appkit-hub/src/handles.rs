@@ -65,13 +65,13 @@ pub fn is_inheritable(handle: BorrowedHandle<'_>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use appkit_scratch::Scratch;
 
     #[test]
     fn an_inheritable_handle_is_no_longer_inheritable_after_the_call() {
         // A file the standard library opens is not inheritable: it is made so here, as the
         // standard handles of a program started with a pipe are.
-        let dir = std::env::temp_dir().join(format!("appkit-handles-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = Scratch::new("handles");
         let file = std::fs::File::create(dir.join("probe")).unwrap();
         let raw = file.as_handle();
         // SAFETY: the handle of `file`, open for the call.
@@ -83,6 +83,5 @@ mod tests {
         assert!(not_inheritable(raw));
         assert!(!is_inheritable(raw));
         drop(file);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

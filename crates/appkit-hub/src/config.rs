@@ -398,6 +398,7 @@ pub fn save_file<A: AppSettings>(dir: &Path, cfg: &FileConfig<A>) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use appkit_scratch::Scratch;
 
     const IDENTITY: AppIdentity = AppIdentity {
         app: "kit-test",
@@ -503,8 +504,7 @@ mod tests {
 
     #[test]
     fn what_the_app_checks_is_checked_on_save_and_on_load() {
-        let dir = std::env::temp_dir().join(format!("appkit-hub-app-keys-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = Scratch::new("hub-app-keys");
         let bad = FileConfig::<Mine> {
             app: Mine {
                 names: vec!["a,b".to_owned()],
@@ -521,14 +521,14 @@ mod tests {
 
     #[test]
     fn a_missing_file_is_an_empty_config() {
-        let dir = std::env::temp_dir().join("appkit-hub-no-such-config-dir");
+        let scratch = Scratch::new("hub-no-config");
+        let dir = scratch.join("no-such-config-dir");
         let cfg = load_file::<NoSettings>(&dir).expect("missing file is fine");
         assert!(cfg.vault.is_none() && cfg.vaults.is_empty());
     }
 
-    fn temp_config(name: &str, bytes: &[u8]) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("appkit-hub-{name}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+    fn temp_config(name: &str, bytes: &[u8]) -> Scratch {
+        let dir = Scratch::new(&format!("hub-{name}"));
         std::fs::write(dir.join("config.json"), bytes).unwrap();
         dir
     }
@@ -599,8 +599,7 @@ mod tests {
 
     #[test]
     fn saving_writes_what_loading_reads_and_refuses_what_is_not_valid() {
-        let dir = std::env::temp_dir().join(format!("appkit-hub-save-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = Scratch::new("hub-save");
         let mut cfg = with_vaults(&[("native", abs())], Some("native"));
         cfg.port = Some(20000);
         save_file(&dir, &cfg).unwrap();

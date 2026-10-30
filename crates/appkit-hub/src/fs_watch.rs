@@ -125,6 +125,7 @@ mod tests {
     use notify::event::{CreateKind, Flag, RemoveKind, RenameMode};
 
     use super::*;
+    use appkit_scratch::Scratch;
 
     /// The rule of a made-up app: a `.rule` file in a folder `rules`, and a folder `rules` itself.
     fn rule_filter(relative: &Path, entry: &dyn Fn() -> Entry) -> bool {
@@ -207,12 +208,11 @@ mod tests {
     #[test]
     fn a_folder_that_only_changed_inside_is_not_a_change_of_the_folder() {
         // The folder is real here, so the file system answers `Folder`.
-        let dir = std::env::temp_dir().join(format!("appkit-hub-watch-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = Scratch::new("hub-watch");
         std::fs::create_dir_all(dir.join("rules")).unwrap();
         let modified =
             |kind: ModifyKind| Event::new(EventKind::Modify(kind)).add_path(dir.join("rules"));
-        let base = vec![dir.clone()];
+        let base = vec![dir.to_path_buf()];
         // Windows reports the folder when a file in it changed: the file has its own event.
         assert_eq!(
             hint_for(&modified(ModifyKind::Any), &base, rule_filter),
@@ -227,6 +227,5 @@ mod tests {
             ),
             Some(Hint::Changed)
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

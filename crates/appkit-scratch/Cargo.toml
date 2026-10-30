@@ -1,0 +1,14 @@
+[package]
+name = "appkit-scratch"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Test support of the kit's own crates: a folder in the temp dir that is removed when the test ends, also when it fails"
+
+[lints]
+workspace = true
+
+[dependencies]
+tempfile = "3"

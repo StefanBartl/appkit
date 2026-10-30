@@ -182,12 +182,10 @@ pub fn remove_secret(dir: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use appkit_scratch::Scratch;
 
-    fn dir(name: &str) -> PathBuf {
-        let d =
-            std::env::temp_dir().join(format!("tasks-desktop-reg-{name}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&d);
-        d
+    fn dir(name: &str) -> Scratch {
+        Scratch::new(&format!("reg-{name}"))
     }
 
     fn record() -> HubRecord {

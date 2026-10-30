@@ -1075,6 +1075,7 @@ fn make_link_in(desktop: &Path, title: &str, app: &str, exe: &Path) -> Result<St
 #[cfg(test)]
 mod tests {
     use super::*;
+    use appkit_scratch::Scratch;
 
     /// An app that is not the one this kit was made from.
     const IDENTITY: AppIdentity = AppIdentity {
@@ -1149,9 +1150,7 @@ mod tests {
     /// the app is removed.
     #[test]
     fn the_desktop_link_comes_from_the_app_and_only_ours_is_removed() {
-        let desktop = std::env::temp_dir().join(format!("appkit-hub-desk-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&desktop);
-        std::fs::create_dir_all(&desktop).unwrap();
+        let desktop = Scratch::new("hub-desk");
         let exe = Path::new(r"C:\Apps\rules-hub.exe");
         let text = make_link_in(&desktop, IDENTITY.title, IDENTITY.app, exe).unwrap();
         assert!(text.contains("\"Rules\""), "{text}");
@@ -1179,7 +1178,6 @@ mod tests {
         make_link_in(&desktop, IDENTITY.title, IDENTITY.app, exe).unwrap();
         remove_link_in(&desktop, IDENTITY.title, &program).unwrap();
         assert!(!link.exists());
-        let _ = std::fs::remove_dir_all(&desktop);
     }
 
     /// `reg query` answers with this value for the desktop.
@@ -1321,8 +1319,7 @@ mod tests {
 
     #[test]
     fn a_probe_is_found_in_the_store_of_a_package_and_only_there() {
-        let base = std::env::temp_dir().join(format!("appkit-hub-pkg-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
+        let base = Scratch::new("hub-pkg");
         let rel = Path::new("appkit-hub");
         let store = base
             .join("Packages")
@@ -1338,7 +1335,6 @@ mod tests {
         assert!(found.ends_with("Some_pkg"));
         // Another kind of store is not this one.
         assert_eq!(find_in_packages(&base, "Local", rel, ".probe-1"), None);
-        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
@@ -1369,8 +1365,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn a_packaged_app_is_noticed_in_the_local_and_the_roaming_store() {
-        let base = std::env::temp_dir().join(format!("appkit-hub-warn-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
+        let base = Scratch::new("hub-warn");
         let local = base.join("Local");
         let config = base.join("Roaming").join("appkit-hub");
         std::fs::create_dir_all(&local).unwrap();
@@ -1401,7 +1396,6 @@ mod tests {
         std::fs::write(store.join("Roaming").join("appkit-hub").join(&probe), b"").unwrap();
         let warning = private_storage_warning(&env, &config).unwrap();
         assert!(warning.contains("Q_two"), "{warning}");
-        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
@@ -1410,12 +1404,8 @@ mod tests {
         assert_eq!(cmd, r#""C:\Program Files\tasks\tasks-hub.exe" start"#);
     }
 
-    fn settings_dir(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("appkit-hub-purge-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
+    fn settings_dir(name: &str) -> Scratch {
+        Scratch::new(&format!("hub-purge-{name}"))
     }
 
     #[test]
@@ -1453,7 +1443,6 @@ mod tests {
             std::fs::read_to_string(dir.join("notes.txt")).unwrap(),
             "mine"
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A registry that holds one value in memory and says what it was asked.
@@ -1629,10 +1618,7 @@ ERROR: Access is denied.
     /// `--purge-settings` removes (the files of the kit, nothing else).
     #[test]
     fn the_closing_of_uninstall_keeps_or_removes_the_settings_and_names_a_setup() {
-        let dir =
-            std::env::temp_dir().join(format!("appkit-uninstall-closing-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = Scratch::new("uninstall-closing");
         std::fs::write(dir.join("config.json"), "{}").unwrap();
         std::fs::write(dir.join("mine.txt"), "not the kit's").unwrap();
         let env = Env::from_pairs([(
@@ -1683,7 +1669,6 @@ ERROR: Access is denied.
         assert!(failed.is_empty(), "{failed:?}");
         assert!(!dir.join("config.json").exists());
         assert!(dir.join("mine.txt").exists());
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

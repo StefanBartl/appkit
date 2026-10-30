@@ -318,6 +318,7 @@ mod tests {
     use crate::config::NoSettings;
     use crate::loginitems::LoginApp;
     use appkit_core::identity::AppIdentity;
+    use appkit_scratch::Scratch;
 
     /// An app that is not the one this kit was made from.
     const IDENTITY: AppIdentity = AppIdentity {
@@ -392,12 +393,8 @@ mod tests {
         }
     }
 
-    fn temp(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("appkit-hub-setup-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
+    fn temp(name: &str) -> Scratch {
+        Scratch::new(&format!("hub-setup-{name}"))
     }
 
     #[test]
@@ -433,7 +430,7 @@ mod tests {
         ask_vault(&mut io, &env, &dir).unwrap();
         assert_eq!(io.asked.len(), 2, "a wrong folder is asked again");
         assert!(io.said.iter().any(|s| s.contains("is not a folder")));
-        assert_eq!(vault_in_settings(&dir), Some(vault));
+        assert_eq!(vault_in_settings(&dir), Some(vault.to_path_buf()));
     }
 
     #[test]
@@ -537,7 +534,7 @@ mod tests {
         let file = Cfg {
             vaults: vec![config::VaultEntry {
                 name: "work".to_owned(),
-                path: other,
+                path: other.to_path_buf(),
             }],
             active: Some("work".to_owned()),
             ..Cfg::default()
@@ -554,7 +551,7 @@ mod tests {
     }
 
     /// The environment of a run: a config folder, an install folder and a vault, all of the test's own.
-    fn run_env(name: &str) -> (Env, PathBuf, PathBuf) {
+    fn run_env(name: &str) -> (Env, Scratch, Scratch) {
         let config = temp(&format!("run-{name}"));
         let bin = temp(&format!("run-{name}-bin"));
         let env = Env::from_pairs([

@@ -332,6 +332,7 @@ pub fn remove_if_target(path: &std::path::Path, program: &str) -> Result<bool, S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use appkit_scratch::Scratch;
 
     fn sample(target: &str) -> Link {
         Link {
@@ -421,9 +422,7 @@ mod tests {
 
     #[test]
     fn only_a_link_to_the_program_is_removed() {
-        let dir = std::env::temp_dir().join(format!("appkit-shell-link-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = Scratch::new("shell-link");
         let ours = dir.join("Rules.lnk");
         write(&ours, &sample(r"C:\Apps\Rules-Hub.EXE")).unwrap();
         assert!(!dir.join("Rules.lnk.new").exists());
@@ -440,7 +439,6 @@ mod tests {
         assert!(not_a_link.exists());
         // No link there at all.
         assert!(!remove_if_target(&ours, "rules-hub.exe").unwrap());
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The shell itself reads the link back (through its COM object, from PowerShell): the
@@ -448,8 +446,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn the_shell_reads_the_link_as_written() {
-        let dir = std::env::temp_dir().join(format!("appkit-shell-com-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = Scratch::new("shell-com");
         let folder = dir.join("Müller äö");
         std::fs::create_dir_all(&folder).unwrap();
         let target = folder.join("rules-hub.exe");
@@ -482,7 +479,6 @@ mod tests {
                 link.description
             )
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

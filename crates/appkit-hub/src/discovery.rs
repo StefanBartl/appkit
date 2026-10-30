@@ -428,6 +428,7 @@ pub async fn discover<A: AppSettings>(
 mod tests {
     use super::*;
     use crate::config::NoSettings;
+    use appkit_scratch::Scratch;
 
     const SPEC: DiscoverySpec = DiscoverySpec {
         vault_var: "RULES_VAULT",
@@ -449,10 +450,8 @@ mod tests {
         resolve_nvim(&SPEC, file, env)
     }
 
-    fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("appkit-hub-{name}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
+    fn temp_dir(name: &str) -> Scratch {
+        Scratch::new(&format!("hub-{name}"))
     }
 
     #[test]
@@ -476,7 +475,8 @@ mod tests {
 
     #[test]
     fn the_setting_beats_the_environment() {
-        let dir = std::env::temp_dir();
+        let scratch = temp_dir("setting");
+        let dir = scratch.to_path_buf();
         let file = Cfg {
             vault: Some(dir.clone()),
             ..Cfg::default()
@@ -489,7 +489,7 @@ mod tests {
 
     #[test]
     fn the_variables_are_those_the_spec_names_and_no_others() {
-        let dir = std::env::temp_dir();
+        let dir = temp_dir("variables");
         let env = Env::from_pairs([("RULES_VAULT", dir.as_os_str().to_owned())]);
         let got = resolve_vault_of(&Cfg::default(), &env).unwrap();
         assert_eq!(got.source, Source::Env("RULES_VAULT"));

@@ -247,6 +247,7 @@ pub fn read_days(path: &std::path::Path) -> BTreeMap<String, Day> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use appkit_scratch::Scratch;
 
     #[test]
     fn dates_round_trip_through_days() {
@@ -300,10 +301,7 @@ mod tests {
 
     #[test]
     fn only_the_last_days_are_kept() {
-        let dir =
-            std::env::temp_dir().join(format!("appkit-hub-usage-keep-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = Scratch::new("hub-usage-keep");
         let path = dir.join("usage.json");
         let log = UsageLog::open(Some(path.clone()));
         {
@@ -325,7 +323,6 @@ mod tests {
         // The oldest were dropped from the file, the newest are there.
         assert!(!read_days(&path).contains_key(&day_key(19_000)));
         assert!(read_days(&path).contains_key(&day_key(19_000 + 429)));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -342,9 +339,7 @@ mod tests {
 
     #[test]
     fn the_log_survives_a_restart_and_holds_nothing_else() {
-        let dir = std::env::temp_dir().join(format!("appkit-hub-usage-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = Scratch::new("hub-usage");
         let path = dir.join("usage.json");
         let log = UsageLog::open(Some(path.clone()));
         let t0 = Instant::now();
@@ -359,14 +354,11 @@ mod tests {
         let day = &doc["days"]["2026-10-12"];
         assert_eq!(day.as_object().unwrap().len(), 2);
         assert_eq!(doc.as_object().unwrap().len(), 2);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_broken_or_foreign_file_is_an_empty_log() {
-        let dir = std::env::temp_dir().join(format!("appkit-hub-usage-bad-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = Scratch::new("hub-usage-bad");
         let path = dir.join("usage.json");
         std::fs::write(&path, "{ not json").unwrap();
         assert!(read_days(&path).is_empty());
@@ -376,7 +368,6 @@ mod tests {
         )
         .unwrap();
         assert!(read_days(&path).is_empty());
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
