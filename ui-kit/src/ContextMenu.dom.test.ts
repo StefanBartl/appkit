@@ -153,6 +153,28 @@ describe('ContextMenu', () => {
     expect(rightClick(el).defaultPrevented).toBe(false);
   });
 
+  it('stays open on a scroll that leaves its target where it was (one that came late, from before the click), closes when the target moves or goes', async () => {
+    const card = document.getElementById('card')!;
+    const scroll = async () => {
+      document.getElementById('view')!.dispatchEvent(new Event('scroll'));
+      await settle();
+    };
+    rightClick(card);
+    await settle();
+    await scroll();
+    expect(menu()).not.toBeNull();
+    vi.spyOn(card, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, -40, 50, 20));
+    await scroll();
+    expect(menu()).toBeNull();
+
+    vi.mocked(card.getBoundingClientRect).mockRestore();
+    rightClick(card);
+    await settle();
+    card.remove();
+    await scroll();
+    expect(menu()).toBeNull();
+  });
+
   it('closes on a press beside it', async () => {
     rightClick(document.getElementById('card')!);
     await settle();

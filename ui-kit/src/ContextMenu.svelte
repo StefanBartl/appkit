@@ -3,7 +3,7 @@
   // on the targets around the pointer or the focus (`use:contextTarget`); what it offers is what the providers of those
   // targets say (`contextmenu.ts`). The browser's own menu stays where nobody offers anything, and in text fields.
   // Keys: Up, Down, Home and End walk the entries, Enter and Space choose, Escape closes and gives the focus back to the
-  // element the menu was opened on. A click beside it, a scroll and a resize close it.
+  // element the menu was opened on. A click beside it, a scroll that moves its target and a resize close it.
   import { tick } from 'svelte';
   import { ariaShortcut, toBlocks, TYPE_AHEAD_MS, typeAheadIndex, type MenuItem } from './menu';
   import {
@@ -32,6 +32,8 @@
   let menu: HTMLElement | undefined = $state();
   // A list longer than the window scrolls inside itself; a scroll box needs a way in for the keyboard (WCAG 2.1.1).
   let scrolls = $state(false);
+  // Where the target of the open menu was when it opened (a scroll that leaves it there does not close the menu).
+  let anchor: { el: HTMLElement; box: DOMRect } | null = null;
   const uid = $props.id();
   let typed = '';
   let typedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -49,6 +51,7 @@
    */
   async function show(items: MenuItem[], at: { x: number; y: number }, back: HTMLElement | null): Promise<void> {
     shown = { x: 0, y: 0, items, back, placed: false };
+    anchor = back && { el: back, box: back.getBoundingClientRect() };
     await tick();
     if (menu) {
       const place = placeMenu(at, menu.getBoundingClientRect(), { width: window.innerWidth, height: window.innerHeight });
@@ -57,6 +60,17 @@
     await tick();
     scrolls = !!menu && menu.scrollHeight > menu.clientHeight;
     buttons()[0]?.focus();
+  }
+
+  /**
+   * Whether the page scrolled the menu's target away. A scroll event comes a frame after the scroll: one from before the
+   * click (a smooth scroll, a box scrolled to the target) arrives when the menu is already open, and leaves the target
+   * where it was; so does a scroll the browser makes to keep the view in place when the page above it changes.
+   */
+  function scrolledAway(): boolean {
+    if (!anchor || !anchor.el.isConnected) return true;
+    const now = anchor.el.getBoundingClientRect();
+    return Math.abs(now.top - anchor.box.top) > 1 || Math.abs(now.left - anchor.box.left) > 1;
   }
 
   function close(restore: boolean): void {
@@ -154,8 +168,8 @@
     if (shown && !(e.target instanceof Node && menu?.contains(e.target))) close(false);
   }}
   onscrollcapture={(e) => {
-    // A long menu scrolls inside itself; the page scrolling away from it closes it.
-    if (shown && !(e.target instanceof Node && menu?.contains(e.target))) close(false);
+    // A long menu scrolls inside itself; the page scrolling its target away closes it.
+    if (shown && !(e.target instanceof Node && menu?.contains(e.target)) && scrolledAway()) close(false);
   }}
 />
 
