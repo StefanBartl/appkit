@@ -123,3 +123,18 @@ jobs:
       - run: pnpm check
       - run: pnpm test
       - run: pnpm audit --audit-level high
+
+  # The parts of a web variant (web-kit, appkit-web): plain JavaScript without dependencies, so there is nothing to
+  # install; Node's own test runner.
+  web-kit:
+    runs-on: [self-hosted, windows]
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web-kit
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 (node24)
+        with:
+          persist-credentials: false
+      - run: node --version && pnpm --version
+      - run: pnpm test

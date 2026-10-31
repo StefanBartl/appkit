@@ -33,7 +33,10 @@ CARGO = (
     'appkit-hub = { git = "https://github.com/WKDSteve/appkit", tag = "v0.23.1" }\n'
     'serde = { version = "1" }\n'
 )
-PACKAGE = '{\n  "dependencies": {\n    "appkit-ui": "github:WKDSteve/appkit#v0.23.1&path:ui-kit",\n    "svelte": "^5.0.0"\n  }\n}\n'
+PACKAGE = (
+    '{\n  "dependencies": {\n    "appkit-ui": "github:WKDSteve/appkit#v0.23.1&path:ui-kit",\n'
+    '    "appkit-web": "github:WKDSteve/appkit#v0.23.1&path:web-kit",\n    "svelte": "^5.0.0"\n  }\n}\n'
+)
 
 
 def make_app(root: Path, name: str, full: bool) -> Path:
@@ -70,8 +73,13 @@ class BumpTextTest(unittest.TestCase):
         self.assertEqual(cargo.count('tag = "v0.23.2"'), 2)
         self.assertIn('serde = { version = "1" }', cargo)
         package, m = bump.bump_package_json(PACKAGE, "v0.23.2", NEW_SHA)
-        self.assertEqual(m, 1)
+        self.assertEqual(m, 2, "appkit-ui and appkit-web move together")
         self.assertIn("github:WKDSteve/appkit#v0.23.2&path:ui-kit", package)
+        self.assertIn("github:WKDSteve/appkit#v0.23.2&path:web-kit", package)
+        self.assertNotIn("v0.23.1", package)
+        # Another folder of appkit is not a package this tool knows.
+        _, k = bump.bump_package_json('"x": "github:WKDSteve/appkit#v0.23.1&path:ui-kit-old"', "v0.23.2", NEW_SHA)
+        self.assertEqual(k, 0)
         self.assertIn('"svelte": "^5.0.0"', package)
 
     def test_a_second_run_changes_nothing(self) -> None:

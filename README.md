@@ -17,6 +17,7 @@ and the same tests. It knows no app: an app brings its names, its routes and its
 | `appkit-testkit` | The security matrix every app's hub must pass, a second minimal app (`Demo`) that proves the guard knows no app, and a fake engine to test without Neovim. |
 | `appkit-scratch` | Test support of the kit's own crates only: `Scratch`, a folder in the temp dir that is removed when the test ends, also when it fails. CI fails when the tests leave anything in the temp dir. |
 | `ui-kit` (`appkit-ui`) | The browser side, Svelte 5 and TypeScript source: the design tokens and base rules, the menu bar, the multi-select, the info button, the markdown reader, the hint popup, the event-stream reader, the pairing code and the hidden-character guard. See [ui-kit/README.md](ui-kit/README.md). |
+| `web-kit` (`appkit-web`) | The parts of an app's web variant (one HTML file opened from disk, no server) that know no app: packing the page into one file with the parts and the policy the app names, and the check that its shell loads nothing; the folder the page works in (picker, folder input, the folders used before in an IndexedDB of the app's own name), the look at the folder, the cache kept per folder, and the browser-test watch on requests and policy violations. Plain JavaScript with types. See [web-kit/README.md](web-kit/README.md). |
 | `release-kit` | How an app is published: GitHub Actions for the rolling build `latest` and the release drafts, and the install scripts (`install.ps1`, `install.sh`) every release carries, stamped with its channel. Any native app can use it, also one without the crates. See [release-kit/README.md](release-kit/README.md). |
 
 ## What goes where
@@ -51,6 +52,12 @@ The page of an app takes the same tag, by its folder (`pnpm-lock.yaml` pins the 
 pnpm add "git+https://github.com/WKDSteve/appkit.git#vX.Y.Z&path:ui-kit"
 ```
 
+A web variant takes `appkit-web` the same way, by the same tag:
+
+```
+pnpm add "git+https://github.com/WKDSteve/appkit.git#vX.Y.Z&path:web-kit"
+```
+
 `Cargo.lock` then pins the commit of the tag. To work on the kit and an app at once, point the app at
 a local checkout in a `.cargo/config.toml` that is not committed:
 
@@ -79,6 +86,8 @@ cargo deny check
 cargo audit
 python3 tools/check-lock-age.py --min-days 7
 python3 -m unittest discover -s release-kit -p "test_*.py"
+pnpm -C ui-kit install --frozen-lockfile && pnpm -C ui-kit check && pnpm -C ui-kit test
+pnpm -C web-kit test
 ```
 
 The CI runs them on Linux and Windows. See [SECURITY.md](SECURITY.md) for what the hub protects

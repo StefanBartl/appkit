@@ -1,0 +1,27 @@
+{
+  "name": "appkit-web",
+  "version": "0.0.0",
+  "private": false,
+  "description": "The parts of an app's web variant (one HTML file opened from disk, no server) that do not depend on the app: packing the page into one file with its parts and policy and refusing a shell that loads anything, the folder the page works in (picker, folder input, the folders used before in an IndexedDB of the app's own name), the look at the folder, the cache kept per folder, and the browser-test watch on requests and policy violations. Plain JavaScript with types, so that Node runs it from node_modules.",
+  "license": "MIT",
+  "repository": "https://github.com/WKDSteve/appkit",
+  "type": "module",
+  "exports": {
+    "./pack": "./src/pack.js",
+    "./folder": "./src/folder.js",
+    "./folder-input": "./src/folder-input.js",
+    "./folder-cache": "./src/folder-cache.js",
+    "./watch": "./src/watch.js",
+    "./e2e": "./src/e2e.js"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}

@@ -11,7 +11,7 @@ not), and doing it by hand is what makes a small appkit fix cost an afternoon.
 
   kit only (ai-desktop, docmap-desktop)   the `uses: WKDSteve/appkit/release-kit/...@<sha> # vX.Y.Z` lines of the
                                           workflows and tools/release-kit.pin
-  full (tasks-desktop, rules-desktop)     the same, and the tag in Cargo.toml and ui/package.json; then
+  full (tasks-desktop, rules-desktop)     the same, and the tag in Cargo.toml and ui/package.json (appkit-ui and appkit-web); then
                                           `cargo update -p appkit-hub` and `pnpm install` rewrite the lock files
 
 The tag must exist in this clone AND on origin, and name the same commit in both: a pin to a commit that GitHub
@@ -49,7 +49,8 @@ USES = re.compile(r"(uses:\s*WKDSteve/appkit/release-kit/[A-Za-z0-9_./-]+@)[0-9a
 PIN_TAG = re.compile(r"^(tag\s*=\s*)v\d+\.\d+\.\d+(?=[ \t]*\r?$)", re.M)
 PIN_COMMIT = re.compile(r"^(commit\s*=\s*)[0-9a-f]{40}(?=[ \t]*\r?$)", re.M)
 CARGO = re.compile(r'(git\s*=\s*"https://github\.com/WKDSteve/appkit",\s*tag\s*=\s*")v\d+\.\d+\.\d+(")')
-UI = re.compile(r"(github:WKDSteve/appkit#)v\d+\.\d+\.\d+(&path:ui-kit)")
+# every package of the page the app takes from a folder of appkit: appkit-ui (ui-kit) and appkit-web (web-kit)
+UI = re.compile(r"(github:WKDSteve/appkit#)v\d+\.\d+\.\d+(&path:(?:ui-kit|web-kit))(?=\")")
 
 
 def bump_workflow(text: str, tag: str, sha: str) -> tuple[str, int]:
