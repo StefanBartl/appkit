@@ -1,12 +1,8 @@
 # CI of appkit.
 #
-# Runs on a self-hosted runner (the author's Windows machine): the repository is private and has no paid plan, so
-# hosted runners do not start (billing/spending-limit errors, not a code problem). Runner: $REPOS_DIR/tasks-vault/
-# TOOLS/self-hosted-runner.md; start it with `scripts/runners.ps1 ensure appkit` of the nvim config (or
-# `:MyPlugins runner start appkit`). Without a running runner a push stays "Queued" (no red mark, discarded after 24 h).
-# Only for PRIVATE repos with trusted authors; no `pull_request` trigger on purpose (a PR would run its own workflow
-# with the author's rights on this machine). Windows only: the Linux legs of the former matrix are gone, and so is
-# The Linux legs are gone; ShellCheck of the release-kit shell scripts runs on the runner.
+# Runs on the maintainer's self-hosted Windows runner, on pushes to main only. There is deliberately no
+# `pull_request` trigger: a pull request would run its own workflow code on that machine. Contributions are
+# checked by the maintainer before they land. ShellCheck of the release-kit shell scripts runs on the same runner.
 #
 # The tools (cargo, rustfmt, clippy, cargo-audit, cargo-deny, pnpm, python) are expected on the runner's PATH and are
 # not pinned here; the jobs print their versions.
