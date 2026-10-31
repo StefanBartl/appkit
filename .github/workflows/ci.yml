@@ -124,8 +124,9 @@ jobs:
       - run: pnpm test
       - run: pnpm audit --audit-level high
 
-  # The parts of a web variant (web-kit, appkit-web): plain JavaScript without dependencies, so there is nothing to
-  # install; Node's own test runner.
+  # The parts of a web variant (web-kit, appkit-web): plain JavaScript without dependencies; Node's own test runner.
+  # The hand-written declarations (src/*.d.ts) are type-checked against a consumer (test/types/consumer.ts) with the
+  # TypeScript of ui-kit, so web-kit itself still installs nothing: only ui-kit's locked dependencies are installed.
   web-kit:
     runs-on: [self-hosted, windows]
     timeout-minutes: 10
@@ -138,3 +139,5 @@ jobs:
           persist-credentials: false
       - run: node --version && pnpm --version
       - run: pnpm test
+      - run: pnpm -C ../ui-kit install --frozen-lockfile
+      - run: pnpm check

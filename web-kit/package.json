@@ -22,6 +22,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test \"test/*.test.mjs\""
+    "test": "node --test \"test/*.test.mjs\"",
+    "check": "pnpm -C ../ui-kit exec tsc -p ../web-kit/tsconfig.types.json"
   }
 }

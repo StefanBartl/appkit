@@ -50,10 +50,14 @@ To work on the kit and an app at once, point the app at the checkout for the tim
 
 ```
 cd web-kit && pnpm test
+cd web-kit && pnpm check      # needs `pnpm -C ../ui-kit install --frozen-lockfile` once
 ```
 
 The tests are Node's own (`node --test`), with fakes for the window, the folders, IndexedDB (one fake origin with
 databases by name) and the Playwright page. `test/types.test.mjs` checks that the declarations name what each module
-exports. Whether the declarations fit their callers is the consumer's type check: tasks-desktop type-checks the calls
-of `pack` and `e2e` it makes, and Playwright's `Page` as the kit's `PageLike`, in `ui/web/appkit-web.types.ts`
-(`pnpm check`, through `ui/tsconfig.kit.json`); the browser modules are checked where its `src/` imports them.
+exports. `pnpm check` type-checks the declarations against a consumer, `test/types/consumer.ts` (every module called
+the way an app calls it, imported through the package's own `exports`, and a page shaped like Playwright's `Page` as
+the kit's `PageLike`), with the TypeScript of ui-kit (`tsconfig.types.json`), so the kit itself installs nothing; CI
+runs both in the job `web-kit`. The apps check their own calls too: tasks-desktop type-checks the calls of `pack` and
+`e2e` it makes, and Playwright's real `Page` as `PageLike`, in `ui/web/appkit-web.types.ts` (`pnpm check`, through
+`ui/tsconfig.kit.json`).
