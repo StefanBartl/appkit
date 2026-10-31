@@ -58,6 +58,22 @@ pub fn creation_flags(window: Window) -> u32 {
     }
 }
 
+/// Is `path` absolute, on this machine (no network share, no device namespace) and without a `..`?
+/// The caller has checked its paths already; this is the second layer, so that a program on a
+/// share or one reached by climbing out of a root never starts, whatever the caller did.
+fn local_absolute(path: &Path) -> bool {
+    use std::path::{Component, Prefix};
+    path.is_absolute()
+        && path.components().all(|c| match c {
+            Component::ParentDir => false,
+            Component::Prefix(p) => !matches!(
+                p.kind(),
+                Prefix::UNC(..) | Prefix::VerbatimUNC(..) | Prefix::DeviceNS(_)
+            ),
+            _ => true,
+        })
+}
+
 /// Start `program` with `args` and return its process id. The call does not wait for the
 /// program; a thread of this process collects its exit status so that it is not left as a zombie.
 ///
@@ -66,13 +82,13 @@ pub fn creation_flags(window: Window) -> u32 {
 /// The program or the working folder is not absolute or does not exist, an argument holds a NUL,
 /// or the system refused to start it.
 pub fn spawn(program: &Path, args: &[&str], opts: &LaunchOpts<'_>) -> Result<u32, String> {
-    if !program.is_absolute() || !program.is_file() {
+    if !local_absolute(program) || !program.is_file() {
         return Err(format!(
             "not started: {} is not an absolute path to a file",
             program.display()
         ));
     }
-    if !opts.cwd.is_absolute() || !opts.cwd.is_dir() {
+    if !local_absolute(opts.cwd) || !opts.cwd.is_dir() {
         return Err(format!(
             "not started: {} is not an absolute path to a folder",
             opts.cwd.display()
@@ -155,6 +171,32 @@ mod tests {
         let exe = std::env::current_exe().unwrap();
         assert!(spawn(&exe, &[], &opts(Path::new("."))).is_err());
         assert!(spawn(&exe, &[], &opts(&dir.join("gone"))).is_err());
+    }
+
+    #[test]
+    fn a_path_that_climbs_is_refused_as_program_and_as_folder() {
+        let dir = Scratch::new("launch-climb");
+        let exe = std::env::current_exe().unwrap();
+        let climbing = dir.join("..").join(exe.file_name().unwrap());
+        assert!(!local_absolute(&climbing));
+        assert!(spawn(&climbing, &[], &opts(&dir)).is_err());
+        assert!(spawn(&exe, &[], &opts(&dir.join(".."))).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_program_on_a_share_or_in_the_device_namespace_is_refused() {
+        for path in [
+            r"\\server\share\tool.exe",
+            r"\\?\UNC\server\share\tool.exe",
+            r"\\.\pipe\tool",
+        ] {
+            assert!(!local_absolute(Path::new(path)), "{path}");
+        }
+        assert!(local_absolute(Path::new(r"C:\Program Files\app\app.exe")));
+        assert!(local_absolute(Path::new(
+            r"\\?\C:\Program Files\app\app.exe"
+        )));
     }
 
     #[test]
