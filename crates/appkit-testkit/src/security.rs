@@ -574,9 +574,25 @@ pub async fn hello_needs_no_token_and_carries_no_data(s: &dyn Subject) {
             "instance",
             "kind",
             "schema",
+            "setup_reason",
+            "setup_required",
             "version"
         ]
     );
+    // A hub that is set up says so with a boolean and no reason; a reason is a short code.
+    assert!(doc["setup_required"].is_boolean(), "{}", r.body);
+    match doc["setup_reason"].as_str() {
+        None => assert!(doc["setup_reason"].is_null() && doc["setup_required"] == false),
+        Some(code) => {
+            assert_eq!(doc["setup_required"], true);
+            assert!(
+                !code.is_empty()
+                    && code.len() <= 32
+                    && code.bytes().all(|b| b.is_ascii_lowercase() || b == b'_'),
+                "setup_reason is not a short code: {code:?}"
+            );
+        }
+    }
     assert_eq!(doc["app"], s.identity().app);
     assert_eq!(doc["instance"], h.server.instance());
     // No path, no drive letter, no vault, no area.

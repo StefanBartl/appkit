@@ -13,6 +13,14 @@ pub trait Runtime: Send + Sync + 'static {
 
     /// Stop what the runtime started; called when another vault is chosen and when the server ends.
     fn stop(&self);
+
+    /// Why the app cannot be used yet and has to be set up first (`hello` says it as
+    /// `setup_required`): a short code such as `no_vault`, never a path. `None` when it is set up.
+    /// A hub that other programs list (the central hub) shows "setup needed" instead of a page
+    /// that cannot work.
+    fn setup_required(&self) -> Option<&'static str> {
+        None
+    }
 }
 
 /// How the app makes the runtime of a vault that was chosen.
@@ -335,6 +343,11 @@ mod tests {
             self.stopped
                 .store(true, std::sync::atomic::Ordering::SeqCst);
         }
+
+        // Like an app whose vault is not set: the problem it reports is the reason.
+        fn setup_required(&self) -> Option<&'static str> {
+            self.status.problem.filter(|p| *p == "no_vault")
+        }
     }
 
     struct TwoVaults;
@@ -450,6 +463,27 @@ mod tests {
         let after = json_of(hello(State(core)).await).await;
         assert_eq!(after["engine"]["ready"], true);
         assert_eq!(after["engine"]["capabilities"][0], "second");
+    }
+
+    #[tokio::test]
+    async fn hello_says_when_the_app_has_to_be_set_up_first() {
+        let unset = Arc::new(OtherRuntime::new(HubStatus {
+            engine_ready: false,
+            problem: Some("no_vault"),
+            capabilities: Vec::new(),
+        }));
+        let said = json_of(hello(State(core_with(&unset))).await).await;
+        assert_eq!(said["setup_required"], true);
+        assert_eq!(said["setup_reason"], "no_vault");
+
+        let set = Arc::new(OtherRuntime::new(HubStatus {
+            engine_ready: true,
+            problem: None,
+            capabilities: Vec::new(),
+        }));
+        let said = json_of(hello(State(core_with(&set))).await).await;
+        assert_eq!(said["setup_required"], false);
+        assert!(said["setup_reason"].is_null());
     }
 
     async fn update_with(core: &Arc<Core<OtherRuntime>>, body: &'static str) -> Response {

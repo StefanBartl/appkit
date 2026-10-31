@@ -31,12 +31,16 @@ pub async fn shell<R: Runtime>(State(st): State<Arc<Core<R>>>, uri: axum::http::
 pub async fn hello<R: Runtime>(State(st): State<Arc<Core<R>>>) -> Response {
     let rt = st.rt();
     // Version and abilities only: no task, no area, no path, no vault name.
+    let setup = rt.setup_required();
     let body = json!({
         "schema": 1,
         "kind": "hub.hello",
         "app": st.app,
         "version": st.version,
         "instance": st.instance,
+        // Added to schema 1: a reader that does not know them ignores them.
+        "setup_required": setup.is_some(),
+        "setup_reason": setup,
         "engine": {
             "ready": rt.status().engine_ready,
             "problem": rt.status().problem,

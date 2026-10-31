@@ -47,6 +47,7 @@ use tokio::task::JoinHandle;
 
 pub mod access;
 pub mod background;
+pub mod browser;
 pub mod client;
 pub mod config;
 pub mod discovery;
@@ -59,6 +60,7 @@ mod handles;
 pub mod http;
 pub mod hub;
 pub mod instance;
+pub mod launch;
 pub mod limits;
 pub mod loginitems;
 pub mod search;

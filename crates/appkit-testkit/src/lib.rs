@@ -9,11 +9,13 @@
 //!   app with [`security_matrix!`].
 //! * [`subjects`]: `Demo`, a second, minimal app that is built on `appkit-hub` alone and so proves
 //!   that the guard knows no app.
+//! * [`ports`]: the default ports of the apps that run side by side; no two share one.
 //! * [`dialect`] and [`fake_engine`]: a stand-in for the engine of an app, to test the seam of the
 //!   engine and the routes without Neovim.
 
 pub mod dialect;
 pub mod fake_engine;
+pub mod ports;
 pub mod security;
 pub mod subject;
 pub mod subjects;

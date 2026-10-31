@@ -13,7 +13,7 @@ and the same tests. It knows no app: an app brings its names, its routes and its
 | Crate | What it is |
 |---|---|
 | `appkit-core` | Building blocks without a server: the names of an app (`AppIdentity`), pairing and sessions, safe process runs and reads, `hub.json`, `control.secret`. |
-| `appkit-hub` | The hub without the app: the guard (eight steps, in a fixed order), pairing, the page, `hello`, the list of vaults, the accept loop, the seam of the engine (one process per call, or a persistent host), the snapshot store, the file watcher, the full-text search, the settings file, the search for Neovim and the engine, installing, autostart and the first-start questions. |
+| `appkit-hub` | The hub without the app: the guard (eight steps, in a fixed order), pairing, the page, `hello`, the list of vaults, the accept loop, the seam of the engine (one process per call, or a persistent host), the snapshot store, the file watcher, the full-text search, the settings file, the search for Neovim and the engine, installing, autostart and the first-start questions, and for hubs that start other programs: `launch` (argv only, stdio null, nothing inherited) and `browser` (opens only `http://127.0.0.1:<port>/…` for the ports an app names). |
 | `appkit-testkit` | The security matrix every app's hub must pass, a second minimal app (`Demo`) that proves the guard knows no app, and a fake engine to test without Neovim. |
 | `appkit-scratch` | Test support of the kit's own crates only: `Scratch`, a folder in the temp dir that is removed when the test ends, also when it fails. CI fails when the tests leave anything in the temp dir. |
 | `ui-kit` (`appkit-ui`) | The browser side, Svelte 5 and TypeScript source: the design tokens and base rules, the menu bar, the multi-select, the info button, the markdown reader, the hint popup, the event-stream reader, the pairing code and the hidden-character guard. See [ui-kit/README.md](ui-kit/README.md). |
@@ -75,6 +75,39 @@ mod my_app {
     appkit_testkit::security_matrix!(my_app_testkit::MyApp);
 }
 ```
+
+## A hub without a vault
+
+An app that holds no data and runs no engine (the central hub that only lists and starts other
+apps) needs no vault and no Neovim. It builds its hub from `appkit-hub::serve` with
+
+- a `Runtime` that keeps only a `HubStatus` (`engine_ready: false`, no capabilities); `stop` does nothing,
+- `vaults: None` in `ServeParts` and a `build` that is never called,
+- the routes it brings itself, and `Pages` for its page,
+
+and it does not call `setup::run`: the first-start questions are about a vault. `Demo` in
+`appkit-testkit` is exactly this app, and `tests/no_vault.rs` runs it. No change of `Core` was
+needed, a Dummy-runtime is the supported way.
+
+An app that does need setup says so in `hello`: `Runtime::setup_required()` returns a short code
+(`no_vault`), and `hello` carries `setup_required` (bool) and `setup_reason` (code or `null`). A
+program that lists apps shows "setup needed" instead of a page that cannot work.
+
+## Starting programs and opening pages
+
+`launch::spawn(program, args, &LaunchOpts { cwd, window })` starts a program of somebody else:
+the program is an absolute path to a file, the arguments an argv (never a shell string), stdin,
+stdout and stderr are the null device, the standard handles of this process are made not
+inheritable first (otherwise the child holds a pipe or log of its parent open), and the working
+folder and the kind of window are always named. It never hides a window (`CREATE_NO_WINDOW`,
+`DETACHED_PROCESS`). `browser::open(url, ports)` opens a link in the default browser only when
+it is `http://127.0.0.1:<port>/…` with a port from the list and plain characters after it.
+
+## Ports
+
+The default ports of the apps that run side by side are listed in
+[`appkit-testkit/src/ports.rs`](crates/appkit-testkit/src/ports.rs); `tests/ports.rs` fails when
+two share one. Free: 17612–17614, 17619–17649.
 
 ## Checks
 

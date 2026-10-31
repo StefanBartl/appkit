@@ -18,12 +18,20 @@ path = "src/lib.rs"
 name = "fake-engine"
 path = "src/bin/fake-engine.rs"
 
+[[bin]]
+name = "launch-probe"
+path = "src/bin/launch-probe.rs"
+
 [dependencies]
 appkit-core = { path = "../appkit-core" }
 appkit-hub = { path = "../appkit-hub" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json"] }
 serde_json = "1"
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
+
+# Only the launch probe and its tests look at handles and consoles (src/bin/launch-probe.rs).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Console"] }
 
 [dev-dependencies]
 appkit-scratch = { path = "../appkit-scratch" }
